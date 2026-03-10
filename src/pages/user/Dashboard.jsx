@@ -69,31 +69,28 @@ const UserDashboard = () => {
       <div className="w-full overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
         <div className="grid grid-cols-3">
           <button
-            className={`py-3 text-center font-medium transition-colors ${
-              taskView === "recent"
+            className={`py-3 text-center font-medium transition-colors ${taskView === "recent"
                 ? "bg-blue-600 text-white"
                 : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-            }`}
+              }`}
             onClick={() => setTaskView("recent")}
           >
             Recent Tasks
           </button>
           <button
-            className={`py-3 text-center font-medium transition-colors ${
-              taskView === "upcoming"
+            className={`py-3 text-center font-medium transition-colors ${taskView === "upcoming"
                 ? "bg-blue-600 text-white"
                 : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-            }`}
+              }`}
             onClick={() => setTaskView("upcoming")}
           >
             Upcoming Tasks
           </button>
           <button
-            className={`py-3 text-center font-medium transition-colors ${
-              taskView === "overdue"
+            className={`py-3 text-center font-medium transition-colors ${taskView === "overdue"
                 ? "bg-blue-600 text-white"
                 : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-            }`}
+              }`}
             onClick={() => setTaskView("overdue")}
           >
             Overdue Tasks
@@ -127,21 +124,19 @@ const UserDashboard = () => {
       <div className="space-y-4">
         <div className="flex border-b border-gray-200 dark:border-gray-700">
           <button
-            className={`py-2 px-4 font-medium ${
-              activeTab === "tasks"
+            className={`py-2 px-4 font-medium ${activeTab === "tasks"
                 ? "border-b-2 border-green-600 text-green-600 dark:text-green-400"
                 : "text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
-            }`}
+              }`}
             onClick={() => setActiveTab("tasks")}
           >
             My Tasks
           </button>
           <button
-            className={`py-2 px-4 font-medium ${
-              activeTab === "overview"
+            className={`py-2 px-4 font-medium ${activeTab === "overview"
                 ? "border-b-2 border-green-600 text-green-600 dark:text-green-400"
                 : "text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
-            }`}
+              }`}
             onClick={() => setActiveTab("overview")}
           >
             Overview
@@ -210,11 +205,11 @@ const TasksList = ({ filter }) => {
   // Filter tasks based on the filter prop
   const filteredTasks = filter
     ? tasks.filter((task) => {
-        if (filter === "recent") return true // Show all for demo
-        if (filter === "upcoming") return !task.completed
-        if (filter === "overdue") return false // No overdue tasks in this demo
-        return true
-      })
+      if (filter === "recent") return true // Show all for demo
+      if (filter === "upcoming") return !task.completed
+      if (filter === "overdue") return false // No overdue tasks in this demo
+      return true
+    })
     : tasks
 
   return (
@@ -227,9 +222,8 @@ const TasksList = ({ filter }) => {
         filteredTasks.map((task) => (
           <div
             key={task.id}
-            className={`card ${task.completed ? "opacity-60" : ""} border-l-4 ${
-              task.completed ? "border-l-green-500" : "border-l-blue-500"
-            } transition-all hover:shadow-md`}
+            className={`card ${task.completed ? "opacity-60" : ""} border-l-4 ${task.completed ? "border-l-green-500" : "border-l-blue-500"
+              } transition-all hover:shadow-md`}
           >
             <div className="p-4 pb-2 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950 dark:to-purple-950 border-b border-blue-200 dark:border-blue-800">
               <div className="flex items-center justify-between">

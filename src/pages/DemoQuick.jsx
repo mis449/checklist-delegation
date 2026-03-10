@@ -61,8 +61,8 @@ export default function QuickTask() {
                 console.log("Found rows:", data.table.rows); // Debug log
                 const departments = new Set();
                 // Skip header row and get unique departments from column A
-                data.table.rows.slice(1).forEach((row) => {
-                    if (row.c && row.c[0]?.v && row.c[0].v.toString().toLowerCase() !== "department") {
+                data.table.rows.slice(0).forEach((row) => {
+                    if (row.c && row.c[0]?.v) {
                         console.log("Found department:", row.c[0].v); // Debug log
                         departments.add(row.c[0].v);
                     }

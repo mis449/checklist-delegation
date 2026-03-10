@@ -23,7 +23,7 @@ const CONFIG = {
   APPS_SCRIPT_URL:
     "https://script.google.com/macros/s/AKfycbzfrYD9dNLvntXzm3TB-iSfH-0zlkOS5gWG83VLqsv9Hua-9VgjGOgE0sOE7H9xD2gj/exec",
   // Google Drive folder ID for file uploads
-  DRIVE_FOLDER_ID: "1mocSXHZWgUBRpRCpOS_-1L-f0CcVJcl_",
+  DRIVE_FOLDER_ID: "1r17CspqyKzqOzfm-l4dALX5TQ-OU3sOu",
   // Sheet name to work with
   SHEET_NAME: "Checklist",
   // Page configuration
@@ -71,6 +71,7 @@ function AccountDataPage() {
 
   const [buddyTaskFilter, setBuddyTaskFilter] = useState(""); // Selected buddy name
   const [assignedPersons, setAssignedPersons] = useState([]); // List from sessionStorage
+  const [timeFilter, setTimeFilter] = useState("all"); // Filter: Today, Upcoming, Overdue, All
   const [currentCaptureId, setCurrentCaptureId] = useState(null);
   // Ye states already hai aapke code me (around line 50-60), check karo ye sab exist karte hai:
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -413,16 +414,24 @@ function AccountDataPage() {
     ) {
       return dateTimeStr;
     }
-    // Handle Google Sheets Date(year,month,day) format
+    // Handle Google Sheets Date(year,month,day,h,m,s) format
     if (typeof dateTimeStr === "string" && dateTimeStr.startsWith("Date(")) {
-      const match = /Date\((\d+),(\d+),(\d+)\)/.exec(dateTimeStr);
-      if (match) {
-        const year = Number.parseInt(match[1], 10);
-        const month = Number.parseInt(match[2], 10);
-        const day = Number.parseInt(match[3], 10);
-        return `${day.toString().padStart(2, "0")}/${(month + 1)
-          .toString()
-          .padStart(2, "0")}/${year}`;
+      const parts = dateTimeStr.match(/\d+/g);
+      if (parts && parts.length >= 3) {
+        const year = Number.parseInt(parts[0], 10);
+        const month = Number.parseInt(parts[1], 10);
+        const day = Number.parseInt(parts[2], 10);
+        const hours = parts[3] ? Number.parseInt(parts[3], 10) : 0;
+        const minutes = parts[4] ? Number.parseInt(parts[4], 10) : 0;
+        const seconds = parts[5] ? Number.parseInt(parts[5], 10) : 0;
+
+        const date = new Date(year, month, day, hours, minutes, seconds);
+
+        if (parts.length > 3) {
+          return formatDateTimeToDDMMYYYY(date);
+        } else {
+          return formatDateToDDMMYYYY(date);
+        }
       }
     }
     // Try to parse as a regular date
@@ -471,6 +480,7 @@ function AccountDataPage() {
     setSelectedMembers([]);
     setStartDate("");
     setEndDate("");
+    setTimeFilter("all");
   };
 
   // NEW: Edit functionality functions
@@ -735,7 +745,7 @@ function AccountDataPage() {
 
   // Memoized filtered data to prevent unnecessary re-renders
   const filteredAccountData = useMemo(() => {
-    const filtered = searchTerm
+    let filtered = searchTerm
       ? accountData.filter((account) =>
         Object.values(account).some(
           (value) =>
@@ -745,6 +755,31 @@ function AccountDataPage() {
       )
       : accountData;
 
+    // Time Filter logic
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (timeFilter !== "all") {
+      filtered = filtered.filter((account) => {
+        const dateStr = account["col6"] || "";
+        if (!dateStr) return false;
+
+        const datePart = dateStr.split(" ")[0];
+        const taskDate = parseDateFromDDMMYYYY(datePart);
+        if (!taskDate) return false;
+        taskDate.setHours(0, 0, 0, 0);
+
+        if (timeFilter === "today") {
+          return taskDate.getTime() === today.getTime();
+        } else if (timeFilter === "upcoming") {
+          return taskDate.getTime() > today.getTime();
+        } else if (timeFilter === "overdue") {
+          return taskDate.getTime() < today.getTime();
+        }
+        return true;
+      });
+    }
+
     // Frontend-only: hide tasks whose Remarks (col13) contain "leave" — no sheet changes
     const withoutLeave = filtered.filter((account) => {
       const remarks = String(account["col13"] || "").trim().toLowerCase();
@@ -752,7 +787,7 @@ function AccountDataPage() {
     });
 
     return withoutLeave.sort(sortDateWise);
-  }, [accountData, searchTerm]);
+  }, [accountData, searchTerm, timeFilter]);
 
   const filteredHistoryData = useMemo(() => {
     return historyData
@@ -1403,9 +1438,39 @@ function AccountDataPage() {
               </p>
             </div>
 
-            <h1 className="sm:text-xl tracking-tight text-purple-700 text-center sm:text-left">
-              Pending Tasks: {filteredAccountData.length}
-            </h1>
+            <div className="flex flex-col items-end gap-2">
+              <h1 className="sm:text-xl tracking-tight text-purple-700 text-center sm:text-left">
+                Pending Tasks: {filteredAccountData.length}
+              </h1>
+              {!showHistory && (
+                <div className="flex bg-white/50 p-1 rounded-md border border-purple-200">
+                  <button
+                    onClick={() => setTimeFilter("today")}
+                    className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${timeFilter === 'today' ? 'bg-purple-600 text-white shadow-sm' : 'text-purple-700 hover:bg-purple-100'}`}
+                  >
+                    Today
+                  </button>
+                  <button
+                    onClick={() => setTimeFilter("upcoming")}
+                    className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${timeFilter === 'upcoming' ? 'bg-purple-600 text-white shadow-sm' : 'text-purple-700 hover:bg-purple-100'}`}
+                  >
+                    Upcoming
+                  </button>
+                  <button
+                    onClick={() => setTimeFilter("overdue")}
+                    className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${timeFilter === 'overdue' ? 'bg-purple-600 text-white shadow-sm' : 'text-purple-700 hover:bg-purple-100'}`}
+                  >
+                    Overdue
+                  </button>
+                  <button
+                    onClick={() => setTimeFilter("all")}
+                    className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${timeFilter === 'all' ? 'bg-purple-600 text-white shadow-sm' : 'text-purple-700 hover:bg-purple-100'}`}
+                  >
+                    All
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           {loading ? (

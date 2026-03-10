@@ -21,7 +21,7 @@ const CONFIG = {
     "https://script.google.com/macros/s/AKfycbzfrYD9dNLvntXzm3TB-iSfH-0zlkOS5gWG83VLqsv9Hua-9VgjGOgE0sOE7H9xD2gj/exec",
 
   // Google Drive folder ID for file uploads
-  DRIVE_FOLDER_ID: "1mocSXHZWgUBRpRCpOS_-1L-f0CcVJcl_",
+  DRIVE_FOLDER_ID: "1t_mSL7UZtAsrpHGub8YovsM_00Ir4que",
   SHEET_ID: "1O07ebj7ht7tKqVjHjQPOJ90UETRLQwJ2SiIgE5Uqo4k",
 
   // Sheet names
@@ -495,16 +495,24 @@ function DelegationDataPage() {
         return dateTimeStr + " 00:00:00";
       }
 
-      // Handle Google Sheets Date() format
+      // Handle Google Sheets Date(year,month,day,h,m,s) format
       if (typeof dateTimeStr === "string" && dateTimeStr.startsWith("Date(")) {
-        const match = /Date\((\d+),(\d+),(\d+)\)/.exec(dateTimeStr);
-        if (match) {
-          const year = Number.parseInt(match[1], 10);
-          const month = Number.parseInt(match[2], 10);
-          const day = Number.parseInt(match[3], 10);
-          return `${day.toString().padStart(2, "0")}/${(month + 1)
-            .toString()
-            .padStart(2, "0")}/${year} 00:00:00`;
+        const parts = dateTimeStr.match(/\d+/g);
+        if (parts && parts.length >= 3) {
+          const year = Number.parseInt(parts[0], 10);
+          const month = Number.parseInt(parts[1], 10);
+          const day = Number.parseInt(parts[2], 10);
+          const hours = parts[3] ? Number.parseInt(parts[3], 10) : 0;
+          const minutes = parts[4] ? Number.parseInt(parts[4], 10) : 0;
+          const seconds = parts[5] ? Number.parseInt(parts[5], 10) : 0;
+
+          const date = new Date(year, month, day, hours, minutes, seconds);
+
+          if (parts.length > 3) {
+            return formatDateTimeToDDMMYYYY(date);
+          } else {
+            return formatDateToDDMMYYYY(date) + " 00:00:00";
+          }
         }
       }
 
@@ -559,13 +567,13 @@ function DelegationDataPage() {
         return dateStr;
       }
 
-      // Handle Google Sheets Date() format
+      // Handle Google Sheets Date(year,month,day,h,m,s) format
       if (typeof dateStr === "string" && dateStr.startsWith("Date(")) {
-        const match = /Date\((\d+),(\d+),(\d+)\)/.exec(dateStr);
-        if (match) {
-          const year = Number.parseInt(match[1], 10);
-          const month = Number.parseInt(match[2], 10);
-          const day = Number.parseInt(match[3], 10);
+        const parts = dateStr.match(/\d+/g);
+        if (parts && parts.length >= 3) {
+          const year = Number.parseInt(parts[0], 10);
+          const month = Number.parseInt(parts[1], 10);
+          const day = Number.parseInt(parts[2], 10);
           return `${day.toString().padStart(2, "0")}/${(month + 1)
             .toString()
             .padStart(2, "0")}/${year}`;
@@ -902,7 +910,7 @@ function DelegationDataPage() {
           if (historyData && historyData.table && historyData.table.rows) {
             processedHistoryData = historyData.table.rows
               .map((row, rowIndex) => {
-                
+
 
                 const rowData = {
                   _id: Math.random().toString(36).substring(2, 15),
@@ -960,7 +968,7 @@ function DelegationDataPage() {
       }
 
       rows.forEach((row, rowIndex) => {
-        
+
 
         let rowValues = [];
         if (row.c) {

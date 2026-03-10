@@ -434,7 +434,7 @@ export default function QuickTask() {
         console.log("🔎 Starting user match search...");
 
         // Skip header row and search for user
-        data.table.rows.slice(1).forEach((row, index) => {
+        data.table.rows.slice(0).forEach((row, index) => {
           if (row.c) {
             const doerName = row.c[3]?.v || ""; // Column D - Doer's Name
             const role = row.c[5]?.v || "user"; // Column F - Role
@@ -496,32 +496,41 @@ export default function QuickTask() {
       const data = JSON.parse(jsonData);
 
       if (data?.table?.rows) {
-        const rows = data.table.rows.slice(0); // Skip header
+        // Helper to get cell value robustly
+        const getVal = (row, idx) => {
+          const cell = row.c[idx];
+          if (!cell) return "";
+          return (cell.v !== null && cell.v !== undefined) ? cell.v : (cell.f || "");
+        };
 
         // Map columns according to your specification (B-J from Checklist sheet)
-        const transformedData = rows.map((row, rowIndex) => {
-          // Handle End Date field - convert from Google Sheets format if needed
-          let startDateValue = row.c[6]?.v || "";
-          if (typeof startDateValue === 'string' && startDateValue.startsWith('Date(')) {
-            startDateValue = formatDateForSheet(startDateValue);
-          }
+        const transformedData = data.table.rows
+          .map((row, rowIndex) => {
+            if (!row || !row.c) return null;
 
-          const baseData = {
-            _id: `checklist_${rowIndex}_${Math.random().toString(36).substring(2, 15)}`,
-            _rowIndex: rowIndex + 2,
-            'Task ID': row.c[1]?.v || "",
-            Department: row.c[2]?.v || "",
-            'Given By': row.c[3]?.v || "",
-            Name: row.c[4]?.v || "",
-            'Task Description': row.c[5]?.v || "",
-            'End Date': startDateValue, // Use processed date
-            Frequency: row.c[7]?.v || "",
-            Reminders: row.c[8]?.v || "",
-            Attachment: row.c[9]?.v || "",
-            Task: 'Checklist'
-          };
-          return baseData;
-        });
+            // Handle End Date field - convert from Google Sheets format if needed
+            let startDateValue = getVal(row, 6);
+            if (typeof startDateValue === 'string' && startDateValue.startsWith('Date(')) {
+              startDateValue = formatDateForSheet(startDateValue);
+            }
+
+            return {
+              _id: `checklist_${rowIndex}_${Math.random().toString(36).substring(2, 15)}`,
+              _rowIndex: rowIndex + 2,
+              'Task ID': getVal(row, 1),
+              Department: getVal(row, 2),
+              'Given By': getVal(row, 3),
+              Name: getVal(row, 4),
+              'Task Description': getVal(row, 5),
+              'End Date': startDateValue, // Use processed date
+              Frequency: getVal(row, 7),
+              Reminders: getVal(row, 8),
+              Attachment: getVal(row, 9),
+              Task: 'Checklist'
+            };
+          })
+          .filter(task => task && task['Task ID'] !== "Task ID" && (task.Name || task['Task Description'])); // Exclude header row and empty rows
+
 
         // Use all transformed data directly
         const uniqueTasks = transformedData;
@@ -568,29 +577,39 @@ export default function QuickTask() {
       const data = JSON.parse(jsonData);
 
       if (data?.table?.rows) {
-        const rows = data.table.rows.slice(0); // Skip header
-        const transformedData = rows.map((row, rowIndex) => {
-          const baseData = {
-            _id: `delegation_${rowIndex}_${Math.random().toString(36).substring(2, 15)}`,
-            _rowIndex: rowIndex + 2,
-            // Map columns from Delegation sheet (keep existing mapping)
-            Timestamp: formatDate(row.c[0]?.v),
-            'Task ID': row.c[1]?.v || "",
-            Department: row.c[2]?.v || "",
-            'Given By': row.c[3]?.v || "",
-            Name: row.c[4]?.v || "",
-            'Task Description': row.c[5]?.v || "",
-            'Task End Date': formatDate(row.c[6]?.v),
-            Freq: row.c[7]?.v || "",
-            'Enable Reminders': row.c[8]?.v || "",
-            'Require Attachment': row.c[9]?.v || "",
-          };
-          return baseData;
-        });
+        // Helper to get cell value robustly
+        const getVal = (row, idx) => {
+          const cell = row.c[idx];
+          if (!cell) return "";
+          return (cell.v !== null && cell.v !== undefined) ? cell.v : (cell.f || "");
+        };
+
+        const transformedData = data.table.rows
+          .map((row, rowIndex) => {
+            if (!row || !row.c) return null;
+
+            return {
+              _id: `delegation_${rowIndex}_${Math.random().toString(36).substring(2, 15)}`,
+              _rowIndex: rowIndex + 2,
+              // Map columns from Delegation sheet
+              Timestamp: formatDate(getVal(row, 0)),
+              'Task ID': getVal(row, 1),
+              Department: getVal(row, 2),
+              'Given By': getVal(row, 3),
+              Name: getVal(row, 4),
+              'Task Description': getVal(row, 5),
+              'Task End Date': formatDate(getVal(row, 6)),
+              Freq: getVal(row, 7),
+              'Enable Reminders': getVal(row, 8),
+              'Require Attachment': getVal(row, 9),
+            };
+          })
+          .filter(task => task && task['Task ID'] !== "Task ID" && (task.Name || task['Task Description'])); // Exclude header row and empty rows
+
 
         console.log(`Total delegation tasks:`, transformedData.length);
 
-        // Apply role-based filtering (unchanged from original)
+        // Apply role-based filtering
         let filteredData;
         if (isAdmin) {
           // Admin/Superadmin sees all tasks
@@ -608,7 +627,6 @@ export default function QuickTask() {
 
             return isAssignedToUser || isGivenByUser;
           });
-          // console.log(`User access: filtered delegation tasks for ${currentUser}:`, filteredData.length);
         }
 
         setDelegationTasks(filteredData);

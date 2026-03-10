@@ -166,7 +166,7 @@ const CalendarUI = ({ userRole, userName, displayName }) => {
 
   // Dynamic URL from sessionStorage
   const SHEET_ID = "1O07ebj7ht7tKqVjHjQPOJ90UETRLQwJ2SiIgE5Uqo4k";
-const BACKEND_URL =
+  const BACKEND_URL =
     "https://script.google.com/macros/s/AKfycbzfrYD9dNLvntXzm3TB-iSfH-0zlkOS5gWG83VLqsv9Hua-9VgjGOgE0sOE7H9xD2gj/exec";
 
   // ---- STATE ----
@@ -361,7 +361,7 @@ const BACKEND_URL =
       // Step 1: Fetch Working Day Calendar
       const wdcRes = await axios.get(`https://docs.google.com/spreadsheets/d/${typeof CONFIG !== 'undefined' ? CONFIG.SHEET_ID : (typeof SHEET_ID !== 'undefined' ? SHEET_ID : '1O07ebj7ht7tKqVjHjQPOJ90UETRLQwJ2SiIgE5Uqo4k')}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent("Working Day Calendar")}`);
       if (!isMounted) return;
-      
+
       let wdcData = wdcRes.data;
       if (typeof wdcData === 'string') {
         const jsonStart = wdcData.indexOf('{');

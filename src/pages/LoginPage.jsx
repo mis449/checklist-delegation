@@ -36,27 +36,19 @@ const LoginPage = () => {
         );
     };
 
-    // Helper function to fetch data from Apps Script
-    const fetchDataFromAppsScript = async (sheetName) => {
-        const SCRIPT_URL =
-            "https://script.google.com/macros/s/AKfycbzfrYD9dNLvntXzm3TB-iSfH-0zlkOS5gWG83VLqsv9Hua-9VgjGOgE0sOE7H9xD2gj/exec";
-        const response = await fetch(`${SCRIPT_URL}?sheet=${sheetName}`);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return response.json();
-    };
-
-    // Fetch master data on component mount
+    // Fetch user credentials from Whatsapp sheet on component mount
     useEffect(() => {
         const fetchMasterData = async () => {
-            setIsDataLoading(true);
+            const SCRIPT_URL =
+                "https://script.google.com/macros/s/AKfycbzfrYD9dNLvntXzm3TB-iSfH-0zlkOS5gWG83VLqsv9Hua-9VgjGOgE0sOE7H9xD2gj/exec";
 
             try {
-                // Get the spreadsheet ID from your Apps Script
+                setIsDataLoading(true);
+
+                // Get the spreadsheet ID
                 const SPREADSHEET_ID = "1O07ebj7ht7tKqVjHjQPOJ90UETRLQwJ2SiIgE5Uqo4k";
 
-                // Construct the URL to read the sheet data directly
+                // Construct the URL to read the Whatsapp sheet data directly
                 const sheetUrl = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json&sheet=Whatsapp`;
 
                 const response = await fetch(sheetUrl);
@@ -66,22 +58,17 @@ const LoginPage = () => {
                 const jsonString = text.substring(47).slice(0, -2); // Remove Google's wrapper
                 const data = JSON.parse(jsonString);
 
-                // Define sheet names for clarity
-                const WHATSAPP_SHEET = "Whatsapp"; // For login credentials and user roles
-                const MASTER_SHEET = "Whatsapp"; // For department list
-
                 // Create userCredentials and userRoles objects from the sheet data
                 const userCredentials = {};
                 const userRoles = {};
                 const assignmentMapping = {};
 
-                // Process the data rows (skip header row if it exists)
+                // Process the data rows
                 if (data.table && data.table.rows) {
-                    // Start from index 1 to skip header row (adjust if needed)
-                    for (let i = 1; i < data.table.rows.length; i++) {
+                    for (let i = 0; i < data.table.rows.length; i++) {
                         const row = data.table.rows[i];
 
-                        // Extract data from columns C, D, E (indices 2, 3, 4)
+                        // Column D (index 3) = Username, Column E (index 4) = Password, Column F (index 5) = Role
                         const username = row.c[3]
                             ? String(row.c[3].v || "")
                                 .trim()
@@ -90,10 +77,12 @@ const LoginPage = () => {
                         const password = row.c[4] ? String(row.c[4].v || "").trim() : "";
                         const role = row.c[5] ? String(row.c[5].v || "").trim() : "user";
 
+                        // Column G (index 6) = AssignPerson
                         const assignPerson = row.c[6]
                             ? String(row.c[6].v || "").trim()
-                            : ""; // Column G
-                        const doerName = row.c[3] ? String(row.c[3].v || "").trim() : ""; // Column D
+                            : "";
+                        // Column D (index 3) = Doer Name
+                        const doerName = row.c[3] ? String(row.c[3].v || "").trim() : "";
 
                         if (assignPerson && doerName) {
                             // Split by comma and process each assigned person
@@ -103,11 +92,9 @@ const LoginPage = () => {
 
                             assignedNames.forEach((name) => {
                                 if (name) {
-                                    // Skip empty strings
                                     if (!assignmentMapping[name]) {
                                         assignmentMapping[name] = [];
                                     }
-                                    // Avoid duplicates
                                     if (!assignmentMapping[name].includes(doerName)) {
                                         assignmentMapping[name].push(doerName);
                                     }
@@ -133,15 +120,10 @@ const LoginPage = () => {
                 }
 
                 setMasterData({ userCredentials, userRoles, assignmentMapping });
-
-                // Debug - check admin roles specifically
-                const adminUsers = Object.entries(userRoles)
-                    .filter(([, role]) => role === "admin")
-                    .map(([username]) => username);
             } catch (error) {
-                console.error("Error Fetching Master Data:", error);
+                console.error("Error Fetching Whatsapp Sheet Data:", error);
 
-                // Fallback: Try the alternative method using your Apps Script
+                // Fallback: Try the alternative method using Apps Script
                 try {
                     const fallbackResponse = await fetch(SCRIPT_URL, {
                         method: "GET",

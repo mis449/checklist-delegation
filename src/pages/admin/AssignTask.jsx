@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { BellRing, FileCheck, Calendar, Clock } from "lucide-react";
 import AdminLayout from "../../components/layout/AdminLayout";
 
@@ -156,6 +156,20 @@ export default function AssignTask() {
   const [generatedTasks, setGeneratedTasks] = useState([]);
   const [showCalendar, setShowCalendar] = useState(false);
   const [accordionOpen, setAccordionOpen] = useState(false);
+  const calendarRef = useRef(null);
+
+  // Close calendar when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (calendarRef.current && !calendarRef.current.contains(event.target)) {
+        setShowCalendar(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   // Add new state variables for dropdown options
   const [departmentOptions, setDepartmentOptions] = useState([]);
@@ -228,26 +242,26 @@ export default function AssignTask() {
       const givenBy = [];
       const doers = [];
 
-      // Process all rows skip header (index 0 is header)
-      data.table.rows.slice(1).forEach((row) => {
+      // Process all rows starting from index 1 (skip header)
+      data.table.rows.slice(0).forEach((row) => {
         // Column A - Departments
         if (row.c && row.c[0] && row.c[0].v) {
           const value = row.c[0].v.toString().trim();
-          if (value !== "" && value.toLowerCase() !== "department") {
+          if (value !== "") {
             departments.push(value);
           }
         }
         // Column B - Given By
         if (row.c && row.c[1] && row.c[1].v) {
           const value = row.c[1].v.toString().trim();
-          if (value !== "" && value.toLowerCase() !== "given by") {
+          if (value !== "") {
             givenBy.push(value);
           }
         }
         // Column D - Doers
         if (row.c && row.c[3] && row.c[3].v) {
           const value = row.c[3].v.toString().trim();
-          if (value !== "" && value.toLowerCase() !== "doer's name") {
+          if (value !== "") {
             doers.push(value);
           }
         }
@@ -1141,20 +1155,26 @@ export default function AssignTask() {
                   <label className="block text-sm font-medium text-purple-700">
                     Task End Date
                   </label>
-                  <div className="relative">
+                  <div className="relative" ref={calendarRef}>
                     <button
                       type="button"
-                      onClick={() => setShowCalendar(!showCalendar)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowCalendar(!showCalendar);
+                      }}
                       className="w-full flex justify-start items-center rounded-md border border-purple-200 p-2 text-left focus:outline-none focus:ring-1 focus:ring-purple-500"
                     >
                       <Calendar className="mr-2 h-4 w-4 text-purple-500" />
                       {date ? getFormattedDate(date) : "Select a date"}
                     </button>
                     {showCalendar && (
-                      <div className="absolute z-10 mt-1">
+                      <div className="absolute z-50 mt-1">
                         <CalendarComponent
                           date={date}
-                          onChange={setSelectedDate}
+                          onChange={(newDate) => {
+                            setSelectedDate(newDate);
+                            setShowCalendar(false);
+                          }}
                           onClose={() => setShowCalendar(false)}
                         />
                       </div>

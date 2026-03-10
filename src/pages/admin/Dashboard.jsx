@@ -97,27 +97,32 @@ export default function AdminDashboard() {
     if (type === 'total') {
       filteredTasks = [...departmentData.allTasks];
     } else if (type === 'completed') {
-      filteredTasks = departmentData.allTasks.filter(task =>
-        task.status === 'completed'
-      );
+      if (dashboardType === 'delegation') {
+        filteredTasks = departmentData.allTasks.filter(task => task.rating === 1);
+      } else {
+        filteredTasks = departmentData.allTasks.filter(task =>
+          task.status === 'completed'
+        );
+      }
     } else if (type === 'pending') {
       if (dashboardType === 'delegation') {
-        filteredTasks = departmentData.allTasks.filter(task => {
-          if (task.status === 'completed') return false;
-          return true;
-        });
+        filteredTasks = departmentData.allTasks.filter(task => task.rating === 2);
       } else {
         filteredTasks = departmentData.allTasks.filter(task =>
           task.status !== 'completed'
         );
       }
     } else if (type === 'overdue') {
-      filteredTasks = departmentData.allTasks.filter(task => {
-        if (task.status === 'completed') return false;
-        const taskDate = parseDateFromDDMMYYYY(task.taskStartDate);
-        if (!taskDate) return false;
-        return taskDate < today;
-      });
+      if (dashboardType === 'delegation') {
+        filteredTasks = departmentData.allTasks.filter(task => task.rating >= 3);
+      } else {
+        filteredTasks = departmentData.allTasks.filter(task => {
+          if (task.status === 'completed') return false;
+          const taskDate = parseDateFromDDMMYYYY(task.taskStartDate);
+          if (!taskDate) return false;
+          return taskDate < today;
+        });
+      }
     } else if (type === 'notDone') {
       filteredTasks = departmentData.allTasks.filter(task => {
         const statusColumnValue = task.notDoneStatus;
@@ -335,7 +340,8 @@ export default function AdminDashboard() {
   const getCellValue = (row, index) => {
     if (!row || !row.c || index >= row.c.length) return null
     const cell = row.c[index]
-    return cell && 'v' in cell ? cell.v : null
+    if (!cell) return null;
+    return (cell.v !== null && cell.v !== undefined) ? cell.v : (cell.f || null);
   }
 
   // Parse Google Sheets Date format into a proper date string
@@ -467,7 +473,13 @@ export default function AdminDashboard() {
 
       // Process row data
       const processedRows = data.table.rows.map((row, rowIndex) => {
-        
+        const taskId = getCellValue(row, 1);
+
+        // Filter out empty rows and the header row ("Task ID")
+        if (taskId === null || taskId === undefined || taskId === '' ||
+          (typeof taskId === 'string' && (taskId.trim() === '' || taskId.trim().toLowerCase() === 'task id'))) {
+          return null;
+        }
 
         const assignedTo = getCellValue(row, 4) || 'Unassigned';
 
@@ -478,24 +490,12 @@ export default function AdminDashboard() {
           }
         }
 
-        const taskId = getCellValue(row, 1);
-
-        if (taskId === null || taskId === undefined || taskId === '' ||
-          (typeof taskId === 'string' && taskId.trim() === '')) {
-          return null;
-        }
-
         const taskIdStr = String(taskId).trim();
 
         let taskStartDateValue = getCellValue(row, 6);
         const taskStartDate = taskStartDateValue ? parseGoogleSheetsDate(String(taskStartDateValue)) : '';
 
-        if (dashboardType === "delegation") {
-          if (!taskId || taskId === null || taskId === undefined || taskId === '' ||
-            (typeof taskId === 'string' && taskId.trim() === '')) {
-            return null;
-          }
-        } else {
+        if (dashboardType !== "delegation") {
           const taskStartDateObj = parseDateFromDDMMYYYY(taskStartDate);
           if (!taskStartDateObj || taskStartDateObj > tomorrow) {
             return null;
@@ -570,17 +570,20 @@ export default function AdminDashboard() {
         if (dashboardType === "delegation") {
           totalTasks++;
 
+          const ratingRaw = getCellValue(row, 17);
+          const ratingValue = ratingRaw !== null ? Number(ratingRaw) : 0;
+          taskObj.rating = ratingValue;
+
           if (status === 'completed') {
             completedTasks++;
             if (staffData) staffData.completedTasks++;
             statusData.Completed++;
 
-            const ratingValue = getCellValue(row, 17);
             if (ratingValue === 1) {
               completedRatingOne++;
             } else if (ratingValue === 2) {
               completedRatingTwo++;
-            } else if (ratingValue > 2) {
+            } else if (ratingValue >= 3) {
               completedRatingThreePlus++;
             }
 
@@ -1808,7 +1811,14 @@ export default function AdminDashboard() {
             <div className="bg-white rounded-lg shadow-xl w-11/12 max-w-6xl h-5/6 flex flex-col">
               <div className="flex justify-between items-center p-4 border-b">
                 <h2 className="text-xl font-bold text-purple-700">
-                  {popupType.charAt(0).toUpperCase() + popupType.slice(1)} Tasks Details
+                  {dashboardType === 'delegation' ? (
+                    popupType === 'completed' ? 'Completed Once' :
+                      popupType === 'pending' ? 'Completed Twice' :
+                        popupType === 'overdue' ? 'Completed 3+ Times' :
+                          'Total'
+                  ) : (
+                    popupType.charAt(0).toUpperCase() + popupType.slice(1)
+                  )} Tasks Details
                 </h2>
                 <button
                   onClick={() => setPopupOpen(false)}

@@ -126,16 +126,24 @@ function Approval() {
     ) {
       return dateTimeStr;
     }
-    // Handle Google Sheets Date(year,month,day) format
+    // Handle Google Sheets Date(year,month,day,h,m,s) format
     if (typeof dateTimeStr === "string" && dateTimeStr.startsWith("Date(")) {
-      const match = /Date\((\d+),(\d+),(\d+)\)/.exec(dateTimeStr);
-      if (match) {
-        const year = Number.parseInt(match[1], 10);
-        const month = Number.parseInt(match[2], 10);
-        const day = Number.parseInt(match[3], 10);
-        return `${day.toString().padStart(2, "0")}/${(month + 1)
-          .toString()
-          .padStart(2, "0")}/${year}`;
+      const parts = dateTimeStr.match(/\d+/g);
+      if (parts && parts.length >= 3) {
+        const year = Number.parseInt(parts[0], 10);
+        const month = Number.parseInt(parts[1], 10);
+        const day = Number.parseInt(parts[2], 10);
+        const hours = parts[3] ? Number.parseInt(parts[3], 10) : 0;
+        const minutes = parts[4] ? Number.parseInt(parts[4], 10) : 0;
+        const seconds = parts[5] ? Number.parseInt(parts[5], 10) : 0;
+
+        const date = new Date(year, month, day, hours, minutes, seconds);
+
+        if (parts.length > 3) {
+          return formatDateTimeToDDMMYYYY(date);
+        } else {
+          return formatDateToDDMMYYYY(date);
+        }
       }
     }
     // Try to parse as a regular date
@@ -603,11 +611,15 @@ function Approval() {
 
 
   const getTaskStatistics = () => {
-    const totalCompleted = historyData.length;
+    const isChecklist = activeApprovalTab === 'checklist';
+    const currentHistoryData = isChecklist ? historyData : delegationHistoryData;
+    const currentFilteredData = isChecklist ? filteredHistoryData : filteredDelegationHistoryData;
+
+    const totalCompleted = currentHistoryData.length;
     const memberStats =
       selectedMembers.length > 0
         ? selectedMembers.reduce((stats, member) => {
-          const memberTasks = historyData.filter(
+          const memberTasks = currentHistoryData.filter(
             (task) => task["col4"] === member
           ).length;
           return {
@@ -616,7 +628,7 @@ function Approval() {
           };
         }, {})
         : {};
-    const filteredTotal = filteredHistoryData.length;
+    const filteredTotal = currentFilteredData.length;
     return {
       totalCompleted,
       memberStats,
@@ -707,7 +719,7 @@ function Approval() {
         }
 
         rows.forEach((row, rowIndex) => {
-          
+
           let rowValues = [];
           if (row.c) {
             rowValues = row.c.map((cell) =>

@@ -274,9 +274,9 @@ export default function AdminDashboard() {
 
       if (data?.table?.rows) {
         // Extract unique values from column A
-        const columnAValues = data.table.rows.slice(1)
+        const columnAValues = data.table.rows.slice(0)
           .map(row => row?.c?.[0]?.v)
-          .filter(value => value !== null && value !== undefined && value !== "" && value.toLowerCase() !== "department");
+          .filter(value => value !== null && value !== undefined && value !== "");
 
         // Create a Set to get unique values, then convert back to array
         const uniqueValues = [...new Set(columnAValues)];
@@ -289,8 +289,8 @@ export default function AdminDashboard() {
         }
 
         // Count active staff quickly
-        const activeStaffCount = data.table.rows.slice(1)
-          .filter(row => row?.c?.[2]?.v !== null && row?.c?.[2]?.v !== undefined && row?.c?.[2]?.v !== "" && row?.c?.[2]?.v.toLowerCase() !== "designation")
+        const activeStaffCount = data.table.rows.slice(0)
+          .filter(row => row?.c?.[2]?.v !== null && row?.c?.[2]?.v !== undefined && row?.c?.[2]?.v !== "")
           .length;
 
         setDepartmentData(prev => ({ ...prev, activeStaff: activeStaffCount }));

@@ -1,14 +1,14 @@
 "use client"
 import React, { useState, useEffect, useCallback } from 'react'
-import { Calendar, Briefcase, Plus, X, Loader2, RefreshCw } from 'lucide-react'
+import { Calendar, Briefcase, Plus, X, Loader2, RefreshCw, Edit, Save } from 'lucide-react'
 import AdminLayout from '../components/layout/AdminLayout'
-import { isSuperAdmin } from '../utils/authUtils'
+import { isSuperAdmin, isAdminUser } from '../utils/authUtils'
 
 // Configuration
 const CONFIG = {
     SHEET_ID: "1O07ebj7ht7tKqVjHjQPOJ90UETRLQwJ2SiIgE5Uqo4k",
     SHEET_NAME: "Working Day Calendar",
-    HOLIDAY_SHEET_NAME: "Holiday",
+    HOLIDAY_SHEET_NAME: "Working Day Calendar",
     APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbzfrYD9dNLvntXzm3TB-iSfH-0zlkOS5gWG83VLqsv9Hua-9VgjGOgE0sOE7H9xD2gj/exec"
 }
 
@@ -35,7 +35,10 @@ function Holidays() {
         reason: ''
     })
 
-    const canAddData = isSuperAdmin()
+    const [editingId, setEditingId] = useState(null)
+    const [editValues, setEditValues] = useState({})
+
+    const canAddData = isAdminUser()
 
     const tabs = [
         { id: 'working-days', label: 'Working Days', icon: Briefcase },
@@ -84,27 +87,19 @@ function Holidays() {
             setError(null)
 
             const sheetUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(CONFIG.SHEET_NAME)}`
-            const holidaySheetUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(CONFIG.HOLIDAY_SHEET_NAME)}`
-
-            const [response, holidayResponse] = await Promise.all([
-                fetch(sheetUrl),
-                fetch(holidaySheetUrl)
-            ])
-
+            const response = await fetch(sheetUrl)
             const text = await response.text()
-            const holidayText = await holidayResponse.text()
 
-            // Parse Working Days
             const jsonStart = text.indexOf('{')
             const jsonEnd = text.lastIndexOf('}') + 1
             const jsonData = text.substring(jsonStart, jsonEnd)
             const data = JSON.parse(jsonData)
 
             const workingDays = []
-            if (data?.table?.rows) {
-                const rows = data.table.rows.slice(0) // Skip header row
+            const holidays = []
 
-                rows.forEach((row, index) => {
+            if (data?.table?.rows) {
+                data.table.rows.forEach((row, index) => {
                     if (!row.c) return
 
                     // Working Days: Columns A-D (indices 0-3)
@@ -117,37 +112,24 @@ function Holidays() {
                         workingDays.push({
                             _id: `working_${index}`,
                             _rowIndex: index + 2,
+                            _raw: row.c.map(cell => cell?.v || ""), // Store raw row
                             workingDate: formatDate(workingDate),
                             day: workingDay,
                             weekNum: weekNum,
                             month: month
                         })
                     }
-                })
-            }
 
-            // Parse Holidays
-            const hJsonStart = holidayText.indexOf('{')
-            const hJsonEnd = holidayText.lastIndexOf('}') + 1
-            const hJsonData = holidayText.substring(hJsonStart, hJsonEnd)
-            const hData = JSON.parse(hJsonData)
-
-            const holidays = []
-            if (hData?.table?.rows) {
-                const rows = hData.table.rows.slice(0) // Skip header row logic
-
-                rows.forEach((row, index) => {
-                    if (!row.c) return
-
-                    // Holidays from Holiday List sheet: A, B, C (indices 0-2)
-                    const holidayDate = row.c[0]?.v || ""
-                    const holidayDay = row.c[1]?.v || ""
-                    const holidayReason = row.c[2]?.v || ""
+                    // Holidays: Columns F-H (indices 5-7) as per screenshot
+                    const holidayDate = row.c[5]?.v || ""
+                    const holidayDay = row.c[6]?.v || ""
+                    const holidayReason = row.c[7]?.v || ""
 
                     if (holidayDate || holidayDay || holidayReason) {
                         holidays.push({
                             _id: `holiday_${index}`,
                             _rowIndex: index + 2,
+                            _raw: row.c.map(cell => cell?.v || ""), // Store raw row
                             date: formatDate(holidayDate),
                             day: holidayDay,
                             reason: holidayReason
@@ -251,22 +233,36 @@ function Holidays() {
         try {
             setSubmitting(true)
 
+            // Find last row index to append
+            const allIndices = [
+                ...workingDaysData.map(d => d._rowIndex),
+                ...holidaysData.map(d => d._rowIndex)
+            ]
+            const lastIndex = allIndices.length > 0 ? Math.max(...allIndices) : 1
+            const nextRowIndex = lastIndex + 1
+
             // Format data as simple array for columns A-D (Working Days)
             const rowData = [
                 newWorkingDay.workingDate,     // Column A - Working Date
                 newWorkingDay.day,             // Column B - Day
                 String(newWorkingDay.weekNum), // Column C - Week Num
-                String(newWorkingDay.month)    // Column D - Month
+                String(newWorkingDay.month),   // Column D - Month
+                "",                            // Column E
+                "",                            // Column F
+                "",                            // Column G
+                ""                             // Column H
             ]
 
-            const formData = new FormData()
-            formData.append('action', 'insertWorkingDay')
-            formData.append('sheetName', CONFIG.SHEET_NAME)
-            formData.append('rowData', JSON.stringify(rowData))
+            const params = new URLSearchParams()
+            params.append('action', 'update')
+            params.append('sheetName', CONFIG.SHEET_NAME)
+            params.append('rowIndex', String(nextRowIndex))
+            params.append('rowData', JSON.stringify(rowData))
 
             const response = await fetch(CONFIG.APPS_SCRIPT_URL, {
                 method: 'POST',
-                body: formData
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: params
             })
 
             const result = await response.json()
@@ -298,21 +294,37 @@ function Holidays() {
         try {
             setSubmitting(true)
 
-            // Format data as simple array for columns A-C (Holiday List)
+            // Find last row index to append
+            const allIndices = [
+                ...workingDaysData.map(d => d._rowIndex),
+                ...holidaysData.map(d => d._rowIndex)
+            ]
+            const lastIndex = allIndices.length > 0 ? Math.max(...allIndices) : 1
+            const nextRowIndex = lastIndex + 1
+
+            // Format data for columns F-H (Holiday List)
+            // We pad the first 5 columns with empty strings
             const rowData = [
-                newHoliday.date,    // Column A - Date
-                newHoliday.day,     // Column B - Day
-                newHoliday.reason   // Column C - Holiday Reason
+                "",                 // Column A
+                "",                 // Column B
+                "",                 // Column C
+                "",                 // Column D
+                "",                 // Column E
+                newHoliday.date,    // Column F - Date
+                newHoliday.day,     // Column G - Day
+                newHoliday.reason   // Column H - Holiday Reason
             ]
 
-            const formData = new FormData()
-            formData.append('action', 'insertHoliday')
-            formData.append('sheetName', CONFIG.HOLIDAY_SHEET_NAME)
-            formData.append('rowData', JSON.stringify(rowData))
+            const params = new URLSearchParams()
+            params.append('action', 'update')
+            params.append('sheetName', CONFIG.HOLIDAY_SHEET_NAME)
+            params.append('rowIndex', String(nextRowIndex))
+            params.append('rowData', JSON.stringify(rowData))
 
             const response = await fetch(CONFIG.APPS_SCRIPT_URL, {
                 method: 'POST',
-                body: formData
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: params
             })
 
             const result = await response.json()
@@ -329,6 +341,88 @@ function Holidays() {
         } catch (err) {
             console.error('Error adding holiday:', err)
             alert('Failed to add holiday: ' + err.message)
+        } finally {
+            setSubmitting(false)
+        }
+    }
+
+    // Handle Edit click
+    const handleEditClick = (row) => {
+        setEditingId(row._id)
+        if (activeTab === 'working-days') {
+            setEditValues({
+                workingDate: row.workingDate,
+                day: row.day,
+                weekNum: row.weekNum,
+                month: row.month,
+                _rowIndex: row._rowIndex,
+                _raw: row._raw // Preserve original row
+            })
+        } else {
+            setEditValues({
+                date: row.date,
+                day: row.day,
+                reason: row.reason,
+                _rowIndex: row._rowIndex,
+                _raw: row._raw // Preserve original row
+            })
+        }
+    }
+
+    // Handle Cancel Edit
+    const handleCancelEdit = () => {
+        setEditingId(null)
+        setEditValues({})
+    }
+
+    // Handle Update Submission
+    const handleUpdate = async () => {
+        try {
+            setSubmitting(true)
+
+            // Reconstruct full row to avoid overwriting other columns
+            let fullRowData = [...(editValues._raw || [])]
+            // Ensure array has at least 8 elements
+            while (fullRowData.length < 8) fullRowData.push("")
+
+            if (activeTab === 'working-days') {
+                fullRowData[0] = editValues.workingDate
+                fullRowData[1] = editValues.day
+                fullRowData[2] = String(editValues.weekNum)
+                fullRowData[3] = String(editValues.month)
+            } else {
+                // For holidays in the unified sheet, they are in F-H (indices 5-7)
+                fullRowData[5] = editValues.date
+                fullRowData[6] = editValues.day
+                fullRowData[7] = editValues.reason
+            }
+
+            const params = new URLSearchParams()
+            params.append('action', 'update')
+            params.append('sheetName', CONFIG.SHEET_NAME)
+            params.append('rowIndex', String(editValues._rowIndex))
+            params.append('rowData', JSON.stringify(fullRowData))
+
+            const response = await fetch(CONFIG.APPS_SCRIPT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: params
+            })
+
+            const result = await response.json()
+
+            if (result.success) {
+                setSuccessMessage('Record updated successfully!')
+                setEditingId(null)
+                setEditValues({})
+                fetchData()
+                setTimeout(() => setSuccessMessage(''), 3000)
+            } else {
+                throw new Error(result.error || 'Failed to update record')
+            }
+        } catch (err) {
+            console.error('Error updating record:', err)
+            alert('Failed to update record: ' + err.message)
         } finally {
             setSubmitting(false)
         }
@@ -372,7 +466,7 @@ function Holidays() {
                             })}
                         </div>
 
-                        {/* Add Button & Refresh */}
+                        {/* Refresh Button only in Header */}
                         <div className="flex items-center gap-2">
                             <button
                                 onClick={fetchData}
@@ -382,19 +476,6 @@ function Holidays() {
                             >
                                 <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                             </button>
-
-                            {canAddData && (
-                                <button
-                                    onClick={() => setShowAddModal(true)}
-                                    className="flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm
-                                        bg-gradient-to-r from-green-500 to-emerald-500 text-white 
-                                        hover:from-green-600 hover:to-emerald-600 
-                                        shadow-lg shadow-green-500/25 transition-all duration-200"
-                                >
-                                    <Plus className="h-4 w-4" />
-                                    Add {activeTab === 'working-days' ? 'Working Day' : 'Holiday'}
-                                </button>
-                            )}
                         </div>
                     </div>
 
@@ -429,14 +510,29 @@ function Holidays() {
                             <div className="p-6">
                                 {activeTab === 'working-days' && (
                                     <div>
-                                        <div className="flex items-center gap-3 mb-6">
-                                            <div className="p-2 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg">
-                                                <Briefcase className="h-5 w-5 text-white" />
+                                        <div className="flex items-center justify-between gap-3 mb-6">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg">
+                                                    <Briefcase className="h-5 w-5 text-white" />
+                                                </div>
+                                                <div>
+                                                    <h2 className="text-xl font-semibold text-gray-800">Working Days</h2>
+                                                    <p className="text-sm text-gray-500">{workingDaysData.length} records</p>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <h2 className="text-xl font-semibold text-gray-800">Working Days</h2>
-                                                <p className="text-sm text-gray-500">{workingDaysData.length} records</p>
-                                            </div>
+
+                                            {canAddData && (
+                                                <button
+                                                    onClick={() => setShowAddModal(true)}
+                                                    className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm
+                                                        bg-gradient-to-r from-green-500 to-emerald-500 text-white 
+                                                        hover:from-green-600 hover:to-emerald-600 
+                                                        shadow-lg shadow-green-500/25 transition-all duration-200"
+                                                >
+                                                    <Plus className="h-4 w-4" />
+                                                    Add Working Day
+                                                </button>
+                                            )}
                                         </div>
 
                                         {/* Working Days Table */}
@@ -449,28 +545,94 @@ function Holidays() {
                                                         <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 border-b bg-blue-50">Day</th>
                                                         <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 border-b bg-blue-50">Week Num</th>
                                                         <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 border-b bg-blue-50">Month</th>
+                                                        {canAddData && <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700 border-b bg-blue-50">Actions</th>}
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     {workingDaysData.length === 0 ? (
                                                         <tr>
-                                                            <td colSpan="5" className="px-4 py-8 text-center text-gray-500">
+                                                            <td colSpan={canAddData ? 6 : 5} className="px-4 py-8 text-center text-gray-500">
                                                                 No working days data available
                                                             </td>
                                                         </tr>
                                                     ) : (
-                                                        workingDaysData.map((row, index) => (
-                                                            <tr
-                                                                key={row._id}
-                                                                className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
-                                                            >
-                                                                <td className="px-4 py-3 text-sm text-gray-600">{index + 1}</td>
-                                                                <td className="px-4 py-3 text-sm text-gray-800 font-medium">{row.workingDate}</td>
-                                                                <td className="px-4 py-3 text-sm text-gray-600">{row.day}</td>
-                                                                <td className="px-4 py-3 text-sm text-gray-600">{row.weekNum}</td>
-                                                                <td className="px-4 py-3 text-sm text-gray-600">{row.month}</td>
-                                                            </tr>
-                                                        ))
+                                                        workingDaysData.map((row, index) => {
+                                                            const isEditing = editingId === row._id
+                                                            return (
+                                                                <tr
+                                                                    key={row._id}
+                                                                    className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+                                                                >
+                                                                    <td className="px-4 py-3 text-sm text-gray-600">{index + 1}</td>
+                                                                    <td className="px-4 py-3 text-sm text-gray-800 font-medium">
+                                                                        {isEditing ? (
+                                                                            <input
+                                                                                type="date"
+                                                                                value={toInputDateFormat(editValues.workingDate)}
+                                                                                onChange={(e) => {
+                                                                                    const inputDate = e.target.value
+                                                                                    if (inputDate) {
+                                                                                        const [y, m, d] = inputDate.split('-')
+                                                                                        const fmt = `${d}/${m}/${y}`
+                                                                                        setEditValues(prev => ({
+                                                                                            ...prev,
+                                                                                            workingDate: fmt,
+                                                                                            day: getDayName(fmt),
+                                                                                            weekNum: getWeekNumber(fmt),
+                                                                                            month: getMonthNumber(fmt)
+                                                                                        }))
+                                                                                    }
+                                                                                }}
+                                                                                className="px-2 py-1 border border-gray-300 rounded text-sm w-full"
+                                                                            />
+                                                                        ) : (
+                                                                            row.workingDate
+                                                                        )}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-sm text-gray-600">
+                                                                        {isEditing ? editValues.day : row.day}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-sm text-gray-600">
+                                                                        {isEditing ? editValues.weekNum : row.weekNum}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-sm text-gray-600">
+                                                                        {isEditing ? editValues.month : row.month}
+                                                                    </td>
+                                                                    {canAddData && (
+                                                                        <td className="px-4 py-3 text-right">
+                                                                            {isEditing ? (
+                                                                                <div className="flex items-center justify-end gap-2">
+                                                                                    <button
+                                                                                        onClick={handleUpdate}
+                                                                                        disabled={submitting}
+                                                                                        className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors"
+                                                                                        title="Save"
+                                                                                    >
+                                                                                        {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                                                                    </button>
+                                                                                    <button
+                                                                                        onClick={handleCancelEdit}
+                                                                                        disabled={submitting}
+                                                                                        className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                                                                        title="Cancel"
+                                                                                    >
+                                                                                        <X className="h-4 w-4" />
+                                                                                    </button>
+                                                                                </div>
+                                                                            ) : (
+                                                                                <button
+                                                                                    onClick={() => handleEditClick(row)}
+                                                                                    className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                                                                    title="Edit"
+                                                                                >
+                                                                                    <Edit className="h-4 w-4" />
+                                                                                </button>
+                                                                            )}
+                                                                        </td>
+                                                                    )}
+                                                                </tr>
+                                                            )
+                                                        })
                                                     )}
                                                 </tbody>
                                             </table>
@@ -480,14 +642,29 @@ function Holidays() {
 
                                 {activeTab === 'holidays' && (
                                     <div>
-                                        <div className="flex items-center gap-3 mb-6">
-                                            <div className="p-2 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg">
-                                                <Calendar className="h-5 w-5 text-white" />
+                                        <div className="flex items-center justify-between gap-3 mb-6">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg">
+                                                    <Calendar className="h-5 w-5 text-white" />
+                                                </div>
+                                                <div>
+                                                    <h2 className="text-xl font-semibold text-gray-800">Holidays</h2>
+                                                    <p className="text-sm text-gray-500">{holidaysData.length} records</p>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <h2 className="text-xl font-semibold text-gray-800">Holidays</h2>
-                                                <p className="text-sm text-gray-500">{holidaysData.length} records</p>
-                                            </div>
+
+                                            {canAddData && (
+                                                <button
+                                                    onClick={() => setShowAddModal(true)}
+                                                    className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm
+                                                        bg-gradient-to-r from-green-500 to-emerald-500 text-white 
+                                                        hover:from-green-600 hover:to-emerald-600 
+                                                        shadow-lg shadow-green-500/25 transition-all duration-200"
+                                                >
+                                                    <Plus className="h-4 w-4" />
+                                                    Add Holiday
+                                                </button>
+                                            )}
                                         </div>
 
                                         {/* Holidays Table */}
@@ -499,27 +676,98 @@ function Holidays() {
                                                         <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 border-b bg-blue-50">Date</th>
                                                         <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 border-b bg-blue-50">Day</th>
                                                         <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 border-b bg-blue-50">Holiday (Reason)</th>
+                                                        {canAddData && <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700 border-b bg-blue-50">Actions</th>}
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     {holidaysData.length === 0 ? (
                                                         <tr>
-                                                            <td colSpan="4" className="px-4 py-8 text-center text-gray-500">
+                                                            <td colSpan={canAddData ? 5 : 4} className="px-4 py-8 text-center text-gray-500">
                                                                 No holidays data available
                                                             </td>
                                                         </tr>
                                                     ) : (
-                                                        holidaysData.map((row, index) => (
-                                                            <tr
-                                                                key={row._id}
-                                                                className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
-                                                            >
-                                                                <td className="px-4 py-3 text-sm text-gray-600">{index + 1}</td>
-                                                                <td className="px-4 py-3 text-sm text-gray-800 font-medium">{row.date}</td>
-                                                                <td className="px-4 py-3 text-sm text-gray-600">{row.day}</td>
-                                                                <td className="px-4 py-3 text-sm text-gray-600">{row.reason}</td>
-                                                            </tr>
-                                                        ))
+                                                        holidaysData.map((row, index) => {
+                                                            const isEditing = editingId === row._id
+                                                            return (
+                                                                <tr
+                                                                    key={row._id}
+                                                                    className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+                                                                >
+                                                                    <td className="px-4 py-3 text-sm text-gray-600">{index + 1}</td>
+                                                                    <td className="px-4 py-3 text-sm text-gray-800 font-medium">
+                                                                        {isEditing ? (
+                                                                            <input
+                                                                                type="date"
+                                                                                value={toInputDateFormat(editValues.date)}
+                                                                                onChange={(e) => {
+                                                                                    const inputDate = e.target.value
+                                                                                    if (inputDate) {
+                                                                                        const [y, m, d] = inputDate.split('-')
+                                                                                        const fmt = `${d}/${m}/${y}`
+                                                                                        setEditValues(prev => ({
+                                                                                            ...prev,
+                                                                                            date: fmt,
+                                                                                            day: getDayName(fmt)
+                                                                                        }))
+                                                                                    }
+                                                                                }}
+                                                                                className="px-2 py-1 border border-gray-300 rounded text-sm w-full"
+                                                                            />
+                                                                        ) : (
+                                                                            row.date
+                                                                        )}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-sm text-gray-600">
+                                                                        {isEditing ? editValues.day : row.day}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-sm text-gray-600">
+                                                                        {isEditing ? (
+                                                                            <input
+                                                                                type="text"
+                                                                                value={editValues.reason}
+                                                                                onChange={(e) => setEditValues(prev => ({ ...prev, reason: e.target.value }))}
+                                                                                className="px-2 py-1 border border-gray-300 rounded text-sm w-full"
+                                                                            />
+                                                                        ) : (
+                                                                            row.reason
+                                                                        )}
+                                                                    </td>
+                                                                    {canAddData && (
+                                                                        <td className="px-4 py-3 text-right">
+                                                                            {isEditing ? (
+                                                                                <div className="flex items-center justify-end gap-2">
+                                                                                    <button
+                                                                                        onClick={handleUpdate}
+                                                                                        disabled={submitting}
+                                                                                        className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors"
+                                                                                        title="Save"
+                                                                                    >
+                                                                                        {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                                                                    </button>
+                                                                                    <button
+                                                                                        onClick={handleCancelEdit}
+                                                                                        disabled={submitting}
+                                                                                        className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                                                                        title="Cancel"
+                                                                                    >
+                                                                                        <X className="h-4 w-4" />
+                                                                                    </button>
+                                                                                </div>
+                                                                            ) : (
+                                                                                <button
+                                                                                    onClick={() => handleEditClick(row)}
+                                                                                    className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                                                                    title="Edit"
+                                                                                >
+                                                                                    <Edit className="h-4 w-4" />
+                                                                                </button>
+                                                                            )}
+                                                                        </td>
+                                                                    )}
+                                                                </tr>
+                                                            )
+                                                        })
                                                     )}
                                                 </tbody>
                                             </table>

@@ -116,7 +116,6 @@ function Settings() {
             }
 
             const extractedData = rows
-                .slice(1) // Skip header row
                 .map((row, index) => {
                     let rowValues = []
                     if (row.c) {
@@ -127,9 +126,10 @@ function Settings() {
                         rowValues = row
                     }
 
-                    // Column A=index 0, B=index 1, D=index 3, E=index 4, F=index 5, G=index 6, H=index 7
-                    // Note: Column C (index 2) is used in reference as username, but my map has D as doerName
-                    // I will stick to my 8-column map as per the previous working version
+                    // Whatsapp sheet columns:
+                    // A(0)=Department, B(1)=Given By, C(2)=Designation,
+                    // D(3)=Doer's Name, E(4)=Password, F(5)=Role,
+                    // G(6)=ID/Email, H(7)=Number
                     const department = rowValues[0] || ""
                     const givenBy = rowValues[1] || ""
                     const doerName = rowValues[3] || ""
@@ -141,7 +141,7 @@ function Settings() {
                     if (doerName || password || department || givenBy) {
                         return {
                             id: index,
-                            _rowIndex: index + 2,
+                            _rowIndex: index + 2, // gviz rows[0] = Sheet Row 2 (row after header)
                             department: department.toString().trim(),
                             givenBy: givenBy.toString().trim(),
                             doerName: doerName.toString().trim(),
@@ -155,6 +155,7 @@ function Settings() {
                     return null
                 })
                 .filter(Boolean)
+
 
             setData(extractedData)
         } catch (err) {
@@ -325,7 +326,7 @@ function Settings() {
         const headers = leaveData[0]?.headers || []
 
         const getVal = (name) => {
-            const idx = headers.findIndex(h => h?.toLowerCase().includes(name.toLowerCase()))
+            const idx = headers.findIndex(h => String(h || '').toLowerCase().includes(String(name || '').toLowerCase()))
             return idx !== -1 ? row.values[idx] : ''
         }
 
@@ -430,7 +431,7 @@ function Settings() {
     // Submit only the Remarks column for a Leave row back to the Unique sheet
     const submitLeaveRemark = async (row) => {
         const headers = leaveData[0]?.headers || []
-        const remarksColIndex = headers.findIndex(h => h?.toLowerCase().includes('remark'))
+        const remarksColIndex = headers.findIndex(h => String(h || '').toLowerCase().includes('remark'))
         if (remarksColIndex === -1) {
             alert('Remarks column not found in the Unique sheet headers.')
             return
@@ -1205,19 +1206,25 @@ function Settings() {
 
                                 const nameIdx = (() => {
                                     const i = headers.findIndex(h => {
-                                        const l = h?.toLowerCase() || ''
+                                        const l = String(h || '').toLowerCase()
                                         return l.includes('name') || l.includes('doer') || l.includes('user')
                                     })
                                     return i !== -1 ? i : 3
                                 })()
 
                                 const deptIdx = (() => {
-                                    const i = headers.findIndex(h => h?.toLowerCase().includes('dept') || h?.toLowerCase().includes('department'))
+                                    const i = headers.findIndex(h => {
+                                        const l = String(h || '').toLowerCase()
+                                        return l.includes('dept') || l.includes('department')
+                                    })
                                     return i !== -1 ? i : 0
                                 })()
 
                                 const givenByIdx = (() => {
-                                    const i = headers.findIndex(h => h?.toLowerCase().includes('given') || h?.toLowerCase().includes('assignee'))
+                                    const i = headers.findIndex(h => {
+                                        const l = String(h || '').toLowerCase()
+                                        return l.includes('given') || l.includes('assignee')
+                                    })
                                     return i !== -1 ? i : 1
                                 })()
 

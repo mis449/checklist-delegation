@@ -34,11 +34,28 @@ export default function DelegationPage({
   // Format date helper function
   const formatDate = useCallback((dateValue) => {
     if (!dateValue) return "";
+
+    // Handle Google Sheets Date(year,month,day,h,m,s) format
+    if (typeof dateValue === "string" && dateValue.startsWith("Date(")) {
+      const parts = dateValue.match(/\d+/g);
+      if (parts && parts.length >= 3) {
+        const year = Number.parseInt(parts[0], 10);
+        const month = Number.parseInt(parts[1], 10);
+        const day = Number.parseInt(parts[2], 10);
+        const hours = parts[3] ? Number.parseInt(parts[3], 10) : 0;
+        const minutes = parts[4] ? Number.parseInt(parts[4], 10) : 0;
+        const seconds = parts[5] ? Number.parseInt(parts[5], 10) : 0;
+
+        const date = new Date(year, month, day, hours, minutes, seconds);
+        return format(date, "dd/MM/yyyy HH:mm:ss");
+      }
+    }
+
     try {
       const date = new Date(dateValue);
       return isNaN(date.getTime())
         ? dateValue
-        : format(date, "dd/MM/yyyy HH:mm");
+        : format(date, "dd/MM/yyyy HH:mm:ss");
     } catch {
       return dateValue;
     }
@@ -62,7 +79,7 @@ export default function DelegationPage({
       const data = await response.json();
 
       if (data?.table?.rows) {
-        const transformedData = data.table.rows.slice(0)
+        const transformedData = data.table.rows
           .map((row, rowIndex) => ({
             _id: `row_${rowIndex}_${Date.now()}`,
             _rowIndex: rowIndex + 2,
@@ -76,7 +93,9 @@ export default function DelegationPage({
             Freq: row.c[7]?.v || "",
             "Enable Reminders": row.c[8]?.v || "",
             "Require Attachment": row.c[9]?.v || "",
-          }));
+          }))
+          .filter(task => task['Task ID'] !== "Task ID" && (task.Name || task['Task Description'])); // Exclude header row and empty rows
+
 
         // Apply role-based filtering
         let filteredData;

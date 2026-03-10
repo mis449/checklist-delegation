@@ -774,16 +774,16 @@ function Settings() {
         <AdminLayout>
             <div className="space-y-8 animate-in fade-in duration-500">
                 {/* Header and Tabs */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
-                    <div>
-                        <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">
+                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-6">
+                    <div className="w-full lg:w-auto">
+                        <h1 className="text-2xl md:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">
                             User Management System
                         </h1>
-                        <p className="text-gray-500 mt-1">Manage your organization's users and departments</p>
+                        <p className="text-gray-500 mt-1 text-sm md:text-base">Manage your organization's users and departments</p>
                     </div>
 
-                    <div className="flex items-center gap-4">
-                        <div className="flex border border-purple-200 rounded-md overflow-hidden self-start">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full lg:w-auto">
+                        <div className="flex border border-purple-200 rounded-lg overflow-x-auto no-scrollbar shadow-sm bg-white min-w-0">
                             <button
                                 className={`flex px-4 py-3 text-sm font-medium transition-colors ${activeTab === 'users' ? 'bg-purple-600 text-white' : 'bg-white text-purple-600 hover:bg-purple-50'}`}
                                 onClick={() => setActiveTab('users')}
@@ -799,22 +799,20 @@ function Settings() {
                                 Departments
                             </button>
                             <button
-                                className={`flex px-4 py-3 text-sm font-medium transition-colors ${activeTab === 'leave' ? 'bg-purple-600 text-white' : 'bg-white text-purple-600 hover:bg-purple-50'}`}
+                                className={`flex items-center px-4 py-2.5 text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'leave' ? 'bg-purple-600 text-white shadow-inner' : 'bg-white text-purple-600 hover:bg-purple-50'}`}
                                 onClick={() => setActiveTab('leave')}
                             >
-                                <LogOut size={18} className="mr-2" />
+                                <LogOut size={16} className="mr-2" />
                                 Leave
                             </button>
                         </div>
 
                         <button
                             onClick={() => activeTab === 'users' ? setShowAddModal(true) : setShowDeptModal(true)}
-                            className="rounded-md bg-gradient-to-r from-blue-600 to-indigo-600 py-2.5 px-6 text-white hover:from-blue-700 hover:to-indigo-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 shadow-md transition-all active:scale-95"
+                            className="rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 py-2.5 px-6 text-white hover:from-blue-700 hover:to-indigo-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 shadow-md transition-all active:scale-95 flex items-center justify-center font-bold"
                         >
-                            <div className="flex items-center">
-                                <Plus size={18} className="mr-2" />
-                                <span>{activeTab === 'users' ? 'Add User' : 'Add Department'}</span>
-                            </div>
+                            <Plus size={18} className="mr-2" />
+                            <span>{activeTab === 'users' ? 'Add User' : 'Add Department'}</span>
                         </button>
                     </div>
                 </div>
@@ -839,22 +837,31 @@ function Settings() {
                 {/* Users Tab */}
                 {activeTab === 'users' && (
                     <div className="bg-white shadow-xl rounded-2xl overflow-hidden border border-purple-100 transition-all hover:shadow-2xl">
-                        <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-100 px-6 py-5 flex justify-between items-center">
-                            <div className="flex items-center gap-3">
-                                <Users className="text-purple-600" size={20} />
-                                <h2 className="text-lg font-bold text-purple-800">User Directory</h2>
+                        <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-100 px-4 md:px-6 py-5 flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4">
+                            <div className="flex items-center justify-between lg:justify-start gap-3">
+                                <div className="flex items-center gap-2">
+                                    <Users className="text-purple-600" size={20} />
+                                    <h2 className="text-base md:text-lg font-bold text-purple-800">User Directory</h2>
+                                </div>
+                                <button
+                                    onClick={fetchWhatsappData}
+                                    className="lg:hidden p-2 text-purple-600 hover:bg-purple-100 rounded-full transition-colors bg-white shadow-sm border border-purple-100"
+                                    title="Refresh Data"
+                                >
+                                    <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+                                </button>
                             </div>
 
                             {/* Username Filter */}
-                            <div className="relative flex items-center gap-2">
-                                <div className="relative group">
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                                <div className="relative group flex-1 sm:flex-none">
                                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-purple-400 group-focus-within:text-purple-600 transition-colors" size={16} />
                                     <input
                                         type="text"
                                         placeholder="Filter by name..."
                                         value={usernameFilter}
                                         onChange={(e) => setUsernameFilter(e.target.value)}
-                                        className="w-48 pl-10 pr-8 py-2 border border-purple-200 rounded-full focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm bg-white/80 backdrop-blur-sm transition-all"
+                                        className="w-full sm:w-48 pl-10 pr-8 py-2 border border-purple-200 rounded-full focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm bg-white/80 backdrop-blur-sm transition-all"
                                     />
                                     {usernameFilter && (
                                         <button
@@ -866,44 +873,47 @@ function Settings() {
                                     )}
                                 </div>
 
-                                <div className="relative">
-                                    <button
-                                        onClick={toggleUsernameDropdown}
-                                        className="flex items-center gap-1 px-3 py-2 border border-purple-200 rounded-full bg-white text-xs font-semibold text-purple-700 hover:bg-purple-50 hover:border-purple-300 transition-all shadow-sm"
-                                    >
-                                        Names
-                                        <ChevronDown size={14} className={`transition-transform duration-300 ${usernameDropdownOpen ? 'rotate-180' : ''}`} />
-                                    </button>
+                                <div className="flex items-center gap-2">
+                                    <div className="relative flex-1 sm:flex-none">
+                                        <button
+                                            onClick={toggleUsernameDropdown}
+                                            className="w-full flex items-center justify-between gap-2 px-4 py-2 border border-purple-200 rounded-full bg-white text-xs font-semibold text-purple-700 hover:bg-purple-50 hover:border-purple-300 transition-all shadow-sm"
+                                        >
+                                            <span className="truncate max-w-[100px]">{usernameFilter || 'Names'}</span>
+                                            <ChevronDown size={14} className={`flex-shrink-0 transition-transform duration-300 ${usernameDropdownOpen ? 'rotate-180' : ''}`} />
+                                        </button>
 
-                                    {usernameDropdownOpen && (
-                                        <div className="absolute z-50 mt-2 w-56 rounded-xl bg-white shadow-2xl border border-purple-100 max-h-64 overflow-auto top-full right-0 animate-in zoom-in-95 duration-200">
-                                            <div className="p-2 space-y-1">
-                                                <button
-                                                    onClick={clearUsernameFilter}
-                                                    className={`block w-full text-left px-4 py-2 text-sm rounded-lg transition-colors ${!usernameFilter ? 'bg-purple-600 text-white' : 'text-gray-700 hover:bg-purple-50'}`}
-                                                >
-                                                    All Users
-                                                </button>
-                                                {data.filter(u => u.doerName).map(user => (
+                                        {usernameDropdownOpen && (
+                                            <div className="absolute z-50 mt-2 w-56 rounded-xl bg-white shadow-2xl border border-purple-100 max-h-64 overflow-auto top-full right-0 animate-in zoom-in-95 duration-200">
+                                                <div className="p-2 space-y-1">
                                                     <button
-                                                        key={`filter-${user.id}`}
-                                                        onClick={() => handleUsernameFilterSelect(user.doerName)}
-                                                        className={`block w-full text-left px-4 py-2 text-sm rounded-lg transition-colors ${usernameFilter === user.doerName ? 'bg-purple-100 text-purple-900 border-l-4 border-purple-600' : 'text-gray-700 hover:bg-purple-50'}`}
+                                                        onClick={clearUsernameFilter}
+                                                        className={`block w-full text-left px-4 py-2 text-sm rounded-lg transition-colors ${!usernameFilter ? 'bg-purple-600 text-white' : 'text-gray-700 hover:bg-purple-50'}`}
                                                     >
-                                                        {user.doerName}
+                                                        All Users
                                                     </button>
-                                                ))}
+                                                    {data.filter(u => u.doerName).map(user => (
+                                                        <button
+                                                            key={`filter-${user.id}`}
+                                                            onClick={() => handleUsernameFilterSelect(user.doerName)}
+                                                            className={`block w-full text-left px-4 py-2 text-sm rounded-lg transition-colors ${usernameFilter === user.doerName ? 'bg-purple-100 text-purple-900 border-l-4 border-purple-600' : 'text-gray-700 hover:bg-purple-50'}`}
+                                                        >
+                                                            {user.doerName}
+                                                        </button>
+                                                    ))}
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
+                                        )}
+                                    </div>
+
+                                    <button
+                                        onClick={fetchWhatsappData}
+                                        className="hidden lg:block p-2 text-purple-600 hover:bg-purple-100 rounded-full transition-colors"
+                                        title="Refresh Data"
+                                    >
+                                        <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+                                    </button>
                                 </div>
-                                <button
-                                    onClick={fetchWhatsappData}
-                                    className="p-2 text-purple-600 hover:bg-purple-100 rounded-full transition-colors"
-                                    title="Refresh Data"
-                                >
-                                    <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-                                </button>
                             </div>
                         </div>
 
@@ -1052,22 +1062,22 @@ function Settings() {
                 {/* Departments Tab */}
                 {activeTab === 'departments' && (
                     <div className="bg-white shadow-xl rounded-2xl overflow-hidden border border-purple-100 transition-all hover:shadow-2xl">
-                        <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-100 px-6 py-5">
-                            <div className="flex justify-between items-center">
+                        <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-100 px-4 md:px-6 py-5">
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                                 <div className="flex items-center gap-3">
                                     <Building2 className="text-purple-600" size={20} />
-                                    <h2 className="text-lg font-bold text-purple-800">Department Management</h2>
+                                    <h2 className="text-base md:text-lg font-bold text-purple-800">Department Management</h2>
                                 </div>
 
-                                <div className="flex border border-purple-200 rounded-full overflow-hidden p-1 bg-white/50 backdrop-blur-sm shadow-inner">
+                                <div className="flex border border-purple-200 rounded-full overflow-hidden p-1 bg-white shadow-sm self-stretch sm:self-auto">
                                     <button
-                                        className={`px-6 py-2 text-xs font-bold rounded-full transition-all duration-300 ${activeDeptSubTab === 'departments' ? 'bg-purple-600 text-white shadow-md' : 'text-purple-600 hover:bg-purple-100'}`}
+                                        className={`flex-1 sm:flex-none px-6 py-2 text-xs font-bold rounded-full transition-all duration-300 ${activeDeptSubTab === 'departments' ? 'bg-purple-600 text-white shadow-md' : 'text-purple-600 hover:bg-purple-100'}`}
                                         onClick={() => setActiveDeptSubTab('departments')}
                                     >
                                         Names
                                     </button>
                                     <button
-                                        className={`px-6 py-2 text-xs font-bold rounded-full transition-all duration-300 ${activeDeptSubTab === 'givenBy' ? 'bg-purple-600 text-white shadow-md' : 'text-purple-600 hover:bg-purple-100'}`}
+                                        className={`flex-1 sm:flex-none px-6 py-2 text-xs font-bold rounded-full transition-all duration-300 ${activeDeptSubTab === 'givenBy' ? 'bg-purple-600 text-white shadow-md' : 'text-purple-600 hover:bg-purple-100'}`}
                                         onClick={() => setActiveDeptSubTab('givenBy')}
                                     >
                                         Assignees
@@ -1169,14 +1179,14 @@ function Settings() {
                 {/* Leave Tab */}
                 {activeTab === 'leave' && (
                     <div className="bg-white shadow-xl rounded-2xl overflow-hidden border border-purple-100 transition-all hover:shadow-2xl">
-                        <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-100 px-6 py-5 flex justify-between items-center">
+                        <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-100 px-4 md:px-6 py-5 flex justify-between items-center">
                             <div className="flex items-center gap-3">
                                 <LogOut className="text-purple-600" size={20} />
-                                <h2 className="text-lg font-bold text-purple-800">Leave Management</h2>
+                                <h2 className="text-base md:text-lg font-bold text-purple-800">Leave Management</h2>
                             </div>
                             <button
                                 onClick={fetchLeaveData}
-                                className="p-2 text-purple-600 hover:bg-purple-100 rounded-full transition-colors"
+                                className="p-2 text-purple-600 hover:bg-purple-100 rounded-full transition-colors bg-white shadow-sm border border-purple-100"
                                 title="Refresh Data"
                             >
                                 <RefreshCw size={18} className={leaveLoading ? 'animate-spin' : ''} />

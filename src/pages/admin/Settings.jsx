@@ -187,8 +187,11 @@ function Settings() {
             const parsedData = JSON.parse(jsonData)
 
             let rows = []
-            if (parsedData.table && parsedData.table.rows) {
-                rows = parsedData.table.rows
+            // Read actual column headers from parsedData.table.cols (gviz standard)
+            let colHeaders = []
+            if (parsedData.table) {
+                rows = parsedData.table.rows || []
+                colHeaders = (parsedData.table.cols || []).map(col => col.label || col.id || '')
             } else if (Array.isArray(parsedData)) {
                 rows = parsedData
             } else if (parsedData.values) {
@@ -197,32 +200,42 @@ function Settings() {
                 }))
             }
 
-            const headerRow = rows[0]?.c?.map(cell => cell?.v) || rows[0] || []
+            // If gviz cols had no labels, fall back to first row as header
+            const allColsEmpty = colHeaders.every(h => !h)
+            if (allColsEmpty && rows.length > 0) {
+                const firstRow = rows[0]
+                colHeaders = firstRow?.c
+                    ? firstRow.c.map(cell => (cell && cell.v !== undefined ? String(cell.v) : ''))
+                    : (Array.isArray(firstRow) ? firstRow.map(String) : [])
+                rows = rows.slice(1) // skip header row from data
+            }
 
             const extractedData = rows
-                .slice(2) // Skip header row
                 .map((row, index) => {
                     let rowValues = []
                     if (row.c) {
                         rowValues = row.c.map((cell) =>
-                            cell && cell.v !== undefined ? cell.v : ""
+                            cell && cell.v !== undefined ? cell.v : ''
                         )
                     } else if (Array.isArray(row)) {
                         rowValues = row
                     }
-
+                    // Skip fully empty rows
+                    if (rowValues.every(v => v === '' || v === null || v === undefined)) return null
                     return {
                         id: index,
                         _rowIndex: index + 2,
                         values: rowValues,
-                        headers: headerRow
+                        headers: colHeaders
                     }
                 })
                 .filter(Boolean)
-            console.log("extract", extractedData)
+
+            console.log('leave headers:', colHeaders)
+            console.log('leave data:', extractedData)
             setLeaveData(extractedData)
         } catch (err) {
-            console.error("Error fetching Leave data:", err)
+            console.error('Error fetching Leave data:', err)
             setLeaveError(err.message)
         } finally {
             setLeaveLoading(false)
@@ -249,63 +262,48 @@ function Settings() {
             const parsedData = JSON.parse(jsonData)
 
             let allRows = []
-            if (parsedData.table && parsedData.table.rows) allRows = parsedData.table.rows
+            let headers = []
+            if (parsedData.table) {
+                allRows = parsedData.table.rows || []
+                headers = (parsedData.table.cols || []).map(col => col.label || col.id || '')
+            }
 
-            // Get headers from row 0
-            const headers = allRows[0]?.c?.map(c => c?.v) || []
             console.log("Checklist Headers:", headers)
-            const doerIndex = headers.findIndex(h =>
-                h?.toString().toLowerCase().includes('name') ||
-                h?.toString().toLowerCase().includes('doer') ||
-                h?.toString().toLowerCase().includes('assignee') ||
-                h?.toString().toLowerCase().includes('user')
+
+            // Find column indices by searching header labels
+            const findIdx = (keywords) => headers.findIndex(h =>
+                keywords.some(k => String(h || '').toLowerCase().includes(k))
             )
 
-            // Pre-calculate column indices from headers (case-insensitive keyword match)
-            // Fallbacks match known sheet layout: Task ID=col B(1), Description=col F(5), Date=col G(6)
-            const taskIdIdx = (() => {
-                const i = headers.findIndex(h => {
-                    const l = h?.toString().toLowerCase() || ''
-                    return l.includes('task id') || l.includes('task id') || l === 'id'
-                })
-                return i !== -1 ? i : 1
-            })()
-            const descIdx = (() => {
-                const i = headers.findIndex(h => {
-                    const l = h?.toString().toLowerCase() || ''
-                    return l.includes('description') || l.includes('desc') || l.includes('task name') || l.includes('task description')
-                })
-                return i !== -1 ? i : 5
-            })()
-            const dateColIdx = (() => {
-                const i = headers.findIndex(h => {
-                    const l = h?.toString().toLowerCase() || ''
-                    return l.includes('start date') || l.includes('date')
-                })
-                return i !== -1 ? i : 6
-            })()
+            const doerIndex = findIdx(['doer', 'assignee', 'user', 'name'])
+            const taskIdIdx = findIdx(['task id', 'id'])
+            const descIdx = findIdx(['description', 'desc', 'task name', 'task description'])
+            const dateColIdx = findIdx(['start date', 'date', 'time'])
 
-            console.log("Searching for User:", userName, "| ID col:", taskIdIdx, "| Desc col:", descIdx, "| Date col:", dateColIdx)
+            const finalDoerIdx = doerIndex !== -1 ? doerIndex : 5
+            const finalTaskIdIdx = taskIdIdx !== -1 ? taskIdIdx : 1
+            const finalDescIdx = descIdx !== -1 ? descIdx : 5
+            const finalDateIdx = dateColIdx !== -1 ? dateColIdx : 6
 
-            const userTasks = allRows.slice(1).map((row, idx) => {
+            console.log("Searching for User:", userName, "| Doer Col:", finalDoerIdx, "| ID col:", finalTaskIdIdx, "| Desc col:", finalDescIdx, "| Date col:", finalDateIdx)
+
+            const userTasks = allRows.map((row, idx) => {
                 let vals = []
                 if (row.c) vals = row.c.map(c => c?.v)
                 else if (Array.isArray(row)) vals = row
 
-                const assignee = doerIndex !== -1 ? vals[doerIndex] : vals[5]
-                if (idx < 5) console.log(`Row ${idx} Assignee:`, assignee, "Target:", userName)
+                const assignee = vals[finalDoerIdx]
 
-                // Match user name (trim + lowercase, allow partial)
+                // Match user name (trim + lowercase)
                 const aName = String(assignee || '').trim().toLowerCase()
                 const uName = String(userName || '').trim().toLowerCase()
-                // Strict exact match — prevents tasks from other users bleeding through
-                const isAssignedToUser = aName !== '' && uName !== '' && aName === uName
+                const isAssignedToUser = aName !== '' && uName !== '' && (aName === uName || aName.includes(uName))
 
                 if (isAssignedToUser) {
                     return {
-                        id: vals[taskIdIdx],
-                        description: vals[descIdx],
-                        date: vals[dateColIdx] || 'N/A',
+                        id: vals[finalTaskIdIdx],
+                        description: vals[finalDescIdx] || 'No Description',
+                        date: formatGvizValue(vals[finalDateIdx]) || 'N/A',
                         originalRowIndex: idx + 2,
                         allValues: vals
                     }
@@ -313,6 +311,7 @@ function Settings() {
                 return null
             }).filter(t => t !== null)
 
+            console.log(`Found ${userTasks.length} tasks for ${userName}`)
             setChecklistTasks(userTasks)
 
         } catch (e) {
@@ -768,6 +767,23 @@ function Settings() {
         return 'bg-gray-100 text-gray-800'
     }
 
+    // Converts raw gviz Date values like Date(2026,2,9,16,43,49) → "09/03/2026 16:43:49"
+    const formatGvizValue = (val) => {
+        if (!val && val !== 0) return val
+        const str = String(val)
+        const match = str.match(/^Date\((\d+),(\d+),(\d+)(?:,(\d+),(\d+),(\d+))?\)$/)
+        if (match) {
+            const year  = match[1]
+            const month = String(Number(match[2]) + 1).padStart(2, '0') // 0-indexed
+            const day   = String(Number(match[3])).padStart(2, '0')
+            const hh    = match[4] !== undefined ? String(Number(match[4])).padStart(2, '0') : '00'
+            const mm    = match[5] !== undefined ? String(Number(match[5])).padStart(2, '0') : '00'
+            const ss    = match[6] !== undefined ? String(Number(match[6])).padStart(2, '0') : '00'
+            return `${day}/${month}/${year} ${hh}:${mm}:${ss}`
+        }
+        return str
+    }
+
     if (!authorized) return null
 
     return (
@@ -1209,39 +1225,30 @@ function Settings() {
                                     <p>No records found in Unique sheet.</p>
                                 </div>
                             ) : (() => {
-                                // ── Deduplicate by user name ──
-                                // We identify the name, department, and given-by columns from headers,
-                                // then keep only the FIRST occurrence of each unique user name.
+                                // ── Identify strictly needed columns from headers ──
                                 const headers = leaveData[0]?.headers || []
+                                
+                                const findHeaderIdx = (keywords) => headers.findIndex(h => {
+                                    const l = String(h || '').toLowerCase()
+                                    return keywords.some(k => l.includes(k))
+                                })
 
-                                const nameIdx = (() => {
-                                    const i = headers.findIndex(h => {
-                                        const l = String(h || '').toLowerCase()
-                                        return l.includes('name') || l.includes('doer') || l.includes('user')
-                                    })
-                                    return i !== -1 ? i : 3
-                                })()
+                                const deptIdx = findHeaderIdx(['dept', 'department'])
+                                const givenIdx = findHeaderIdx(['given', 'assignee', 'admin'])
+                                const nameIdx = findHeaderIdx(['name', 'doer', 'user'])
 
-                                const deptIdx = (() => {
-                                    const i = headers.findIndex(h => {
-                                        const l = String(h || '').toLowerCase()
-                                        return l.includes('dept') || l.includes('department')
-                                    })
-                                    return i !== -1 ? i : 0
-                                })()
-
-                                const givenByIdx = (() => {
-                                    const i = headers.findIndex(h => {
-                                        const l = String(h || '').toLowerCase()
-                                        return l.includes('given') || l.includes('assignee')
-                                    })
-                                    return i !== -1 ? i : 1
-                                })()
+                                // Map columns with fallbacks (adjusting based on typical sheet layout seen in screenshot)
+                                const visibleCols = [
+                                    { label: 'DEPARTMENT', index: deptIdx !== -1 ? deptIdx : 2 },
+                                    { label: 'GIVEN BY', index: givenIdx !== -1 ? givenIdx : 1 },
+                                    { label: 'NAME', index: nameIdx !== -1 ? nameIdx : 3 }
+                                ]
 
                                 // Keep one row per unique name (first occurrence wins)
                                 const seen = new Set()
                                 const uniqueRows = leaveData.filter(row => {
-                                    const name = String(row.values[nameIdx] || '').trim().toLowerCase()
+                                    const actualNameIdx = nameIdx !== -1 ? nameIdx : 3 // fallback to 3 for deduplication
+                                    const name = String(row.values[actualNameIdx] || '').trim().toLowerCase()
                                     if (!name || seen.has(name)) return false
                                     seen.add(name)
                                     return true
@@ -1252,47 +1259,45 @@ function Settings() {
                                         <thead className="bg-gray-50 sticky top-0 z-10">
                                             <tr>
                                                 <th className="px-3 py-3 w-10 text-center">
-                                                    <span className="sr-only">Leave</span>
+                                                    <span className="sr-only">Action</span>
                                                 </th>
-                                                <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                                                    Department
-                                                </th>
-                                                <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                                                    Given By
-                                                </th>
-                                                <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                                                    Name
-                                                </th>
+                                                {visibleCols.map(col => (
+                                                    <th
+                                                        key={col.label}
+                                                        className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap"
+                                                    >
+                                                        {col.label}
+                                                    </th>
+                                                ))}
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-gray-100">
-                                            {uniqueRows.map((row, rowIndex) => {
-                                                const dept = row.values[deptIdx] || '—'
-                                                const givenBy = row.values[givenByIdx] || '—'
-                                                const name = row.values[nameIdx] || '—'
-
-                                                return (
-                                                    <tr
-                                                        key={row.id || rowIndex}
-                                                        className="hover:bg-purple-50/30 transition-colors group"
-                                                    >
-                                                        {/* Checkbox — opens transfer/leave modal */}
-                                                        <td className="px-3 py-3 text-center whitespace-nowrap">
-                                                            <input
-                                                                type="checkbox"
-                                                                className="rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation()
-                                                                    handleCheckboxClick(row)
-                                                                }}
-                                                            />
+                                            {uniqueRows.map((row, rowIndex) => (
+                                                <tr
+                                                    key={row.id || rowIndex}
+                                                    className="hover:bg-purple-50/30 transition-colors group"
+                                                >
+                                                    {/* Checkbox — opens transfer/leave modal */}
+                                                    <td className="px-3 py-3 text-center whitespace-nowrap">
+                                                        <input
+                                                            type="checkbox"
+                                                            className="rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                handleCheckboxClick(row)
+                                                            }}
+                                                        />
+                                                    </td>
+                                                    {visibleCols.map(col => (
+                                                        <td
+                                                            key={col.label}
+                                                            className="px-4 py-3 text-xs text-gray-800 whitespace-nowrap"
+                                                        >
+                                                            {formatGvizValue(row.values[col.index]) || '—'}
                                                         </td>
-                                                        <td className="px-4 py-3 text-xs text-gray-700 font-medium whitespace-nowrap">{dept}</td>
-                                                        <td className="px-4 py-3 text-xs text-gray-700 whitespace-nowrap">{givenBy}</td>
-                                                        <td className="px-4 py-3 text-xs text-gray-900 font-semibold whitespace-nowrap">{name}</td>
-                                                    </tr>
-                                                )
-                                            })}
+                                                    ))}
+                                                </tr>
+                                            ))}
                                         </tbody>
                                     </table>
                                 )

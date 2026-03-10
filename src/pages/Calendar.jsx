@@ -37,7 +37,11 @@ const toDate = (d) => {
     if (d.startsWith("Date(")) {
       const match = d.match(/Date\((\d+),(\d+),(\d+)/);
       if (match) {
-        return new Date(match[1], match[2], match[3]);
+        // Gviz month is 0-indexed. We construct a YYYY-MM-DD string to ensure UTC midnight.
+        const y = match[1];
+        const m = String(Number(match[2]) + 1).padStart(2, '0');
+        const day = String(Number(match[3])).padStart(2, '0');
+        return new Date(`${y}-${m}-${day}`);
       }
     }
     let t = Date.parse(d);
@@ -61,9 +65,9 @@ const isSameDay = (d1, d2) => {
   d2 = toDate(d2);
   if (!d1 || !d2) return false;
   return (
-    d1.getFullYear() === d2.getFullYear() &&
-    d1.getMonth() === d2.getMonth() &&
-    d1.getDate() === d2.getDate()
+    d1.getUTCFullYear() === d2.getUTCFullYear() &&
+    d1.getUTCMonth() === d2.getUTCMonth() &&
+    d1.getUTCDate() === d2.getUTCDate()
   );
 };
 
@@ -124,13 +128,9 @@ const getNextOccurrences = (
   // If task is in the past, find next occurrence
   let nextDate = new Date(taskStartDate);
 
-  // For one-time tasks, just check if it's within range
+  // For one-time tasks, just check if it's within range AND not on Sunday
   if (freqType === "oneTime") {
-    // if (nextDate >= today && nextDate <= lastWorkingDate) {
-    //   occurrences.push(nextDate);
-    // }
-
-    if (nextDate > today && nextDate <= lastWorkingDate) {
+    if (nextDate > today && nextDate <= lastWorkingDate && nextDate.getUTCDay() !== 0) {
       occurrences.push(nextDate);
     }
     return occurrences;
@@ -145,13 +145,13 @@ const getNextOccurrences = (
       occurrences.push(new Date(nextDate));
     }
 
-    // Calculate next date based on frequency
+    // Calculate next date based on frequency using UTC methods
     if (freqType === "daily") {
-      nextDate.setDate(nextDate.getDate() + 1);
+      nextDate.setUTCDate(nextDate.getUTCDate() + 1);
     } else if (freqType === "weekly") {
-      nextDate.setDate(nextDate.getDate() + 7);
+      nextDate.setUTCDate(nextDate.getUTCDate() + 7);
     } else if (freqType === "monthly") {
-      nextDate.setMonth(nextDate.getMonth() + 1);
+      nextDate.setUTCMonth(nextDate.getUTCMonth() + 1);
     } else {
       break;
     }
@@ -159,8 +159,9 @@ const getNextOccurrences = (
     iterationCount++;
   }
 
-  // Filter to only include dates that are in working dates
+  // Filter to only include dates that are in working dates AND not Sunday (0)
   return occurrences.filter((date) =>
+    date.getUTCDay() !== 0 && 
     workingDates.some((workingDate) => isSameDay(workingDate, date))
   );
 };

@@ -33,6 +33,13 @@ const toDate = (d) => {
   if (d instanceof Date) return d;
   if (typeof d === "number") return new Date(d);
   if (typeof d === "string") {
+    // Handle Google Sheets Date(2023,0,1) format
+    if (d.startsWith("Date(")) {
+      const match = d.match(/Date\((\d+),(\d+),(\d+)/);
+      if (match) {
+        return new Date(match[1], match[2], match[3]);
+      }
+    }
     let t = Date.parse(d);
     if (!isNaN(t)) return new Date(t);
     let m = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
@@ -234,11 +241,11 @@ const CalendarUI = ({ userRole, userName, displayName }) => {
   };
 
   // --- Data transform for Unique sheet ---
-  const transformToTasks = (rows) => {
+  const transformToTasks = (rows, sheetType = "UNIQUE") => {
     if (!rows || rows.length === 0) return [];
     let tasks = [];
 
-    // Assuming Unique sheet has columns:
+    // Assuming sheet has columns:
     // 0: Timestamp, 1: Task ID, 2: Department, 3: Given By, 4: Name,
     // 5: Description, 6: Start Date, 7: Frequency, 8: Time,
     // 9: Status, 10: Remarks, 11: Priority, etc.
@@ -246,35 +253,31 @@ const CalendarUI = ({ userRole, userName, displayName }) => {
     for (let i = 0; i < rows.length; i++) {
       const c = rows[i].c;
       if (!c || c.length === 0) continue;
-      if (!c.some((cell) => cell && cell.v)) continue;
+      // Skip empty rows or rows that don't have enough data
+      if (!c[1]?.v && !c[4]?.v && !c[5]?.v) continue;
 
-      const nameColumnIndex = 4; // Adjust based on your Unique sheet structure
+      const taskId = c[1]?.v || "";
+      const startDateStr = c[6]?.v || "";
+      const startDate = toDate(startDateStr);
 
-      const taskId = c[1]?.v || "",
-        startDateStr = c[6]?.v || "",
-        startDate = toDate(startDateStr),
-        timeStr = c[8]?.v || "",
-        status = c[9]?.v || "pending",
-        remarks = c[10]?.v || "",
-        priority = c[11]?.v || "normal";
-
-      if (!startDate || !taskId) continue;
+      // If no start date, we can't show it on calendar
+      if (!startDate) continue;
 
       tasks.push({
-        taskId,
+        taskId: taskId?.toString() || `row-${i}`,
         department: c[2]?.v || "",
         givenBy: c[3]?.v || "",
-        name: c[nameColumnIndex]?.v || "",
+        name: c[4]?.v || "",
         description: c[5]?.v || "",
         startDate,
-        freq: c[7]?.v?.toString().trim() || "",
-        time: timeStr,
-        status: status,
-        remarks: remarks,
-        priority: priority,
+        freq: c[7]?.v?.toString().trim() || "one-time",
+        time: c[8]?.v || "",
+        status: c[9]?.v || "pending",
+        remarks: c[10]?.v || "",
+        priority: c[11]?.v || "normal",
         timestamp: c[0]?.v || "",
         rowIndex: i + 2,
-        sheetType: "UNIQUE",
+        sheetType: sheetType,
       });
     }
     return tasks;
@@ -296,8 +299,11 @@ const CalendarUI = ({ userRole, userName, displayName }) => {
 
     // Process Unique tasks
     const filteredTasks = roleFilteredTasks(uniqueTasks);
-    const pendingTasks = filterPendingTasks(filteredTasks);
-    const nameFilteredTasks = applyNameFilter(pendingTasks, selectedNameFilter);
+    // Don't filter out completed tasks for the calendar view if we want counts
+    // But the current logic does filter pending ones. 
+    // Usually calendars show all tasks or only pending. 
+    // The screenshot shows high numbers (177), which likely includes all tasks.
+    const nameFilteredTasks = applyNameFilter(filteredTasks, selectedNameFilter);
 
     for (const task of nameFilteredTasks) {
       if (!task.startDate) continue;
@@ -385,35 +391,47 @@ const CalendarUI = ({ userRole, userName, displayName }) => {
       }
       setAllWorkingDates(allDates);
 
-      // Step 2: Fetch UNIQUE sheet tasks
-      const uniqueRes = await axios.get(`https://docs.google.com/spreadsheets/d/${typeof CONFIG !== 'undefined' ? CONFIG.SHEET_ID : (typeof SHEET_ID !== 'undefined' ? SHEET_ID : '1O07ebj7ht7tKqVjHjQPOJ90UETRLQwJ2SiIgE5Uqo4k')}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent("Unique")}`);
+      // Step 2: Fetch tasks from both sheets
+      const checklistUrl = `https://docs.google.com/spreadsheets/d/${typeof CONFIG !== 'undefined' ? CONFIG.SHEET_ID : (typeof SHEET_ID !== 'undefined' ? SHEET_ID : '1O07ebj7ht7tKqVjHjQPOJ90UETRLQwJ2SiIgE5Uqo4k')}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent("Checklist")}`;
+      const delegationUrl = `https://docs.google.com/spreadsheets/d/${typeof CONFIG !== 'undefined' ? CONFIG.SHEET_ID : (typeof SHEET_ID !== 'undefined' ? SHEET_ID : '1O07ebj7ht7tKqVjHjQPOJ90UETRLQwJ2SiIgE5Uqo4k')}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent("DELEGATION")}`;
+
+      const [checklistRes, delegationRes] = await Promise.all([
+        axios.get(checklistUrl),
+        axios.get(delegationUrl)
+      ]);
+
       if (!isMounted) return;
 
-      let uniqueData = uniqueRes.data;
-      if (typeof uniqueData === 'string') {
-        const jsonStart = uniqueData.indexOf('{');
-        const jsonEnd = uniqueData.lastIndexOf('}') + 1;
-        uniqueData = JSON.parse(uniqueData.substring(jsonStart, jsonEnd));
-      }
+      const parseSheetData = (resData) => {
+        let data = resData;
+        if (typeof data === 'string') {
+          const jsonStart = data.indexOf('{');
+          const jsonEnd = data.lastIndexOf('}') + 1;
+          data = JSON.parse(data.substring(jsonStart, jsonEnd));
+        }
+        return data;
+      };
 
-      let uniqueTasks = [];
-      if (
-        uniqueData &&
-        uniqueData.table &&
-        uniqueData.table.rows
-      ) {
-        uniqueTasks = transformToTasks(uniqueData.table.rows);
+      const checklistData = parseSheetData(checklistRes.data);
+      const delegationData = parseSheetData(delegationRes.data);
+
+      let allTasks = [];
+      if (checklistData?.table?.rows) {
+        allTasks = [...allTasks, ...transformToTasks(checklistData.table.rows, "Checklist")];
+      }
+      if (delegationData?.table?.rows) {
+        allTasks = [...allTasks, ...transformToTasks(delegationData.table.rows, "DELEGATION")];
       }
 
       // NEW: Extract unique names for dropdown
-      const names = extractUniqueNames(uniqueTasks);
+      const names = extractUniqueNames(allTasks);
       setAvailableNames(names);
 
       // Step 3: Calculate stats
-      calculateStats(uniqueTasks);
+      calculateStats(allTasks);
 
       // Step 4: Build combined per-date map from today to last working date
-      const map = generateCombinedDateMap(uniqueTasks, allDates);
+      const map = generateCombinedDateMap(allTasks, allDates);
       setDateDataMap(map);
 
       // Create events with proper time slots

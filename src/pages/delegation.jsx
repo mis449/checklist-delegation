@@ -9,7 +9,6 @@ import {
   ArrowLeft,
   Filter,
   ChevronDown,
-  Camera,
 } from "lucide-react";
 import AdminLayout from "../components/layout/AdminLayout";
 import { getUserRole, getUsername, isAdminUser } from "../utils/authUtils";
@@ -85,195 +84,9 @@ function DelegationDataPage() {
 
   // Debounced search term for better performance
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
-  const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const [cameraStream, setCameraStream] = useState(null);
-  const [cameraError, setCameraError] = useState("");
-  const [isCameraLoading, setIsCameraLoading] = useState(false);
-  const [currentCaptureId, setCurrentCaptureId] = useState(null);
 
 
-  // Add these refs
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
 
-  // Add camera cleanup useEffect (after other useEffects)
-  useEffect(() => {
-    return () => {
-      if (cameraStream) {
-        cameraStream.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, [cameraStream]);
-
-  // Add these camera functions (after other functions, before handleSubmit)
-  const startCamera = async () => {
-    try {
-      setCameraError("");
-      setIsCameraLoading(true);
-
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setCameraError("Camera not supported on this device");
-        setIsCameraLoading(false);
-        return;
-      }
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'environment',
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        },
-        audio: false
-      });
-
-      setCameraStream(stream);
-      setIsCameraOpen(true);
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-
-        await new Promise((resolve, reject) => {
-          const video = videoRef.current;
-          if (!video) {
-            reject(new Error("Video ref lost"));
-            return;
-          }
-
-          let metadataLoaded = false;
-          let canPlay = false;
-
-          const checkReady = () => {
-            if (metadataLoaded && canPlay) {
-              resolve();
-            }
-          };
-
-          video.onloadedmetadata = () => {
-            metadataLoaded = true;
-            checkReady();
-          };
-
-          video.oncanplay = () => {
-            canPlay = true;
-            checkReady();
-          };
-
-          video.onerror = (err) => {
-            reject(err);
-          };
-
-          setTimeout(() => {
-            if (!metadataLoaded || !canPlay) {
-              reject(new Error("Video initialization timeout"));
-            }
-          }, 10000);
-        });
-
-        await videoRef.current.play();
-      }
-
-    } catch (error) {
-      console.error("Camera error:", error);
-
-      if (error.name === 'NotAllowedError') {
-        setCameraError("Camera access denied. Please allow camera permissions.");
-      } else if (error.name === 'NotFoundError') {
-        setCameraError("No camera found on this device.");
-      } else if (error.name === 'NotReadableError') {
-        setCameraError("Camera is being used by another application.");
-      } else {
-        setCameraError("Unable to access camera: " + error.message);
-      }
-    } finally {
-      setIsCameraLoading(false);
-    }
-  };
-
-  const stopCamera = () => {
-    if (cameraStream) {
-      cameraStream.getTracks().forEach(track => {
-        track.stop();
-      });
-      setCameraStream(null);
-    }
-
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-
-    setIsCameraOpen(false);
-    setCameraError("");
-    setIsCameraLoading(false);
-    setCurrentCaptureId(null);
-  };
-
-  const capturePhoto = async () => {
-    if (!videoRef.current || !currentCaptureId) {
-      alert("Camera not initialized. Please try again.");
-      return;
-    }
-
-    const video = videoRef.current;
-
-    try {
-      if (video.readyState < 2) {
-        alert("Camera is still loading. Please wait a moment and try again.");
-        return;
-      }
-
-      if (!video.videoWidth || !video.videoHeight) {
-        alert("Camera dimensions not available. Please restart camera.");
-        return;
-      }
-
-      if (!cameraStream || !cameraStream.active) {
-        alert("Camera stream not active. Please restart camera.");
-        return;
-      }
-
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-
-      const context = canvas.getContext('2d');
-      if (!context) {
-        alert("Failed to create canvas context");
-        return;
-      }
-
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      const blob = await new Promise((resolve, reject) => {
-        canvas.toBlob(
-          (blob) => {
-            if (blob) {
-              resolve(blob);
-            } else {
-              reject(new Error("Failed to create blob"));
-            }
-          },
-          'image/jpeg',
-          0.92
-        );
-      });
-
-      const file = new File(
-        [blob],
-        `camera-${Date.now()}.jpg`,
-        { type: 'image/jpeg' }
-      );
-
-      stopCamera();
-
-      handleImageUpload(currentCaptureId, { target: { files: [file] } });
-
-      alert("✅ Photo captured successfully!");
-
-    } catch (error) {
-      console.error("❌ Capture error:", error);
-      alert("Failed to capture photo: " + error.message);
-    }
-  };
 
   // NEW: Function to format date to DD/MM/YYYY HH:MM:SS
   const formatDateTimeToDDMMYYYY = useCallback((date) => {
@@ -2180,18 +1993,6 @@ function DelegationDataPage() {
                                     disabled={!isSelected || isDisabled}
                                   />
 
-                                  <button
-                                    onClick={() => {
-                                      if (!isSelected || isDisabled) return;
-                                      setCurrentCaptureId(account._id);
-                                      startCamera();
-                                    }}
-                                    disabled={!isSelected || isDisabled || isCameraLoading}
-                                    className="flex items-center text-blue-600 hover:text-blue-800 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                                  >
-                                    <Camera className="h-4 w-4 mr-1" />
-                                    <span>{isCameraLoading ? "Loading..." : "Take Photo"}</span>
-                                  </button>
                                 </div>
                               )}
                             </td>
@@ -2396,28 +2197,15 @@ function DelegationDataPage() {
                               </div>
                             ) : (
                               <div className="flex items-center space-x-2 mt-2">
-                                <button
-                                  onClick={() => {
-                                    if (!isSelected || isDisabled) return;
-                                    setCurrentCaptureId(account._id);
-                                    startCamera();
-                                  }}
-                                  disabled={!isSelected || isDisabled}
-                                  className={`flex items-center px-3 py-2 rounded-lg border-2 text-sm font-medium ${isSelected ? "bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100 shadow-md" : "bg-gray-100 border-gray-300 text-gray-400 cursor-not-allowed"
-                                    } disabled:opacity-50 disabled:cursor-not-allowed`}
-                                >
-                                  <Camera className="h-4 w-4 mr-1" />
-                                  <span>Camera</span>
-                                </button>
 
-                                <label className={`flex items-center px-3 py-2 rounded-lg border-2 text-sm font-medium ${isSelected
+                                <label className={`flex items-center px-3 py-1 rounded-lg border-2 text-xs font-medium ${isSelected
                                   ? account["col9"]?.toUpperCase() === "YES"
                                     ? "bg-red-50 border-red-300 text-red-700 hover:bg-red-100 shadow-md"
                                     : "bg-purple-50 border-purple-300 text-purple-700 hover:bg-purple-100 shadow-md"
                                   : "bg-gray-100 border-gray-300 text-gray-400 cursor-not-allowed"
                                   }`}>
                                   <Upload className="h-4 w-4 mr-1" />
-                                  <span>{account["col9"]?.toUpperCase() === "YES" ? "Required*" : "Gallery"}</span>
+                                  <span>{account["col9"]?.toUpperCase() === "YES" ? "Required*" : "Upload Image"}</span>
                                   <input
                                     type="file"
                                     className="hidden"
@@ -2443,64 +2231,6 @@ function DelegationDataPage() {
             </>
           )}
         </div>
-        {isCameraOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full overflow-hidden">
-              <div className="bg-blue-600 text-white px-4 py-3 flex items-center justify-between">
-                <h3 className="text-lg font-semibold">📸 Take Photo</h3>
-                <button
-                  onClick={stopCamera}
-                  className="text-white hover:text-gray-200 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="relative bg-black">
-                <video
-                  ref={videoRef}
-                  className="w-full h-[400px] object-cover"
-                  autoPlay
-                  playsInline
-                  muted
-                />
-
-                {isCameraLoading && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
-                    <div className="text-white text-center">
-                      <div className="animate-spin rounded-full h-12 w-12 border-4 border-white border-t-transparent mx-auto mb-3"></div>
-                      <p>Initializing camera...</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {cameraError && (
-                <div className="bg-red-50 border-l-4 border-red-500 p-4">
-                  <p className="text-sm text-red-700">{cameraError}</p>
-                </div>
-              )}
-
-              <div className="p-4 bg-gray-50 flex gap-3 justify-end">
-                <button
-                  type="button"
-                  onClick={stopCamera}
-                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={capturePhoto}
-                  disabled={isCameraLoading}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
-                >
-                  📸 Capture Photo
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </AdminLayout>
   );

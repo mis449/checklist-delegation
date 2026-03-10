@@ -49,9 +49,14 @@ function Holidays() {
     const formatDate = (dateValue) => {
         if (!dateValue) return ""
         try {
+            let val = dateValue
+            if (typeof val === "string" && val.startsWith("'")) {
+                val = val.substring(1)
+            }
+
             // Already in DD/MM/YYYY format
-            if (typeof dateValue === "string" && dateValue.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
-                return dateValue
+            if (typeof val === "string" && val.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+                return val
             }
 
             // Google Sheets Date format: Date(2025,11,12)
@@ -184,7 +189,7 @@ function Holidays() {
         if (!dateString) return ''
         try {
             const [day, month, year] = dateString.split('/')
-            return parseInt(month)
+            return month.padStart(2, '0')
         } catch {
             return ''
         }
@@ -195,12 +200,15 @@ function Holidays() {
         const inputDate = e.target.value // YYYY-MM-DD format
         if (inputDate) {
             const [year, month, day] = inputDate.split('-')
-            const formattedDate = `${day}/${month}/${year}`
+            // Ensure 2-digit format
+            const d = day.padStart(2, '0')
+            const m = month.padStart(2, '0')
+            const formattedDate = `${d}/${m}/${year}`
             setNewWorkingDay({
                 workingDate: formattedDate,
                 day: getDayName(formattedDate),
                 weekNum: getWeekNumber(formattedDate),
-                month: getMonthNumber(formattedDate)
+                month: m
             })
         } else {
             setNewWorkingDay({ workingDate: '', day: '', weekNum: '', month: '' })
@@ -212,7 +220,9 @@ function Holidays() {
         const inputDate = e.target.value // YYYY-MM-DD format
         if (inputDate) {
             const [year, month, day] = inputDate.split('-')
-            const formattedDate = `${day}/${month}/${year}`
+            const d = day.padStart(2, '0')
+            const m = month.padStart(2, '0')
+            const formattedDate = `${d}/${m}/${year}`
             setNewHoliday(prev => ({
                 ...prev,
                 date: formattedDate,
@@ -258,6 +268,15 @@ function Holidays() {
             params.append('sheetName', CONFIG.SHEET_NAME)
             params.append('rowIndex', String(nextRowIndex))
             params.append('rowData', JSON.stringify(rowData))
+
+            // Add date format metadata to prevent time from being added (00:00:00)
+            params.append('dateTimeFormat', 'DD/MM/YYYY')
+            const dateTimeMetadata = {
+                columns: {
+                    0: { type: "date", format: "DD/MM/YYYY" } // Column A
+                }
+            };
+            params.append('dateTimeMetadata', JSON.stringify(dateTimeMetadata))
 
             const response = await fetch(CONFIG.APPS_SCRIPT_URL, {
                 method: 'POST',
@@ -320,6 +339,15 @@ function Holidays() {
             params.append('sheetName', CONFIG.HOLIDAY_SHEET_NAME)
             params.append('rowIndex', String(nextRowIndex))
             params.append('rowData', JSON.stringify(rowData))
+
+            // Add date format metadata to prevent time from being added (00:00:00)
+            params.append('dateTimeFormat', 'DD/MM/YYYY')
+            const dateTimeMetadata = {
+                columns: {
+                    5: { type: "date", format: "DD/MM/YYYY" } // Column F
+                }
+            };
+            params.append('dateTimeMetadata', JSON.stringify(dateTimeMetadata))
 
             const response = await fetch(CONFIG.APPS_SCRIPT_URL, {
                 method: 'POST',
@@ -403,6 +431,16 @@ function Holidays() {
             params.append('rowIndex', String(editValues._rowIndex))
             params.append('rowData', JSON.stringify(fullRowData))
 
+            // Add date format metadata to prevent time from being added (00:00:00)
+            params.append('dateTimeFormat', 'DD/MM/YYYY')
+            const dateTimeMetadata = {
+                columns: {
+                    0: { type: activeTab === 'working-days' ? "date" : "string", format: "DD/MM/YYYY" },
+                    5: { type: activeTab === 'holidays' ? "date" : "string", format: "DD/MM/YYYY" }
+                }
+            };
+            params.append('dateTimeMetadata', JSON.stringify(dateTimeMetadata))
+
             const response = await fetch(CONFIG.APPS_SCRIPT_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -431,8 +469,10 @@ function Holidays() {
     // Convert DD/MM/YYYY to YYYY-MM-DD for input
     const toInputDateFormat = (dateStr) => {
         if (!dateStr) return ''
-        const [day, month, year] = dateStr.split('/')
-        return `${year}-${month}-${day}`
+        const parts = dateStr.split('/')
+        if (parts.length !== 3) return ''
+        const [day, month, year] = parts
+        return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
     }
 
     return (
@@ -573,7 +613,7 @@ function Holidays() {
                                                                                     const inputDate = e.target.value
                                                                                     if (inputDate) {
                                                                                         const [y, m, d] = inputDate.split('-')
-                                                                                        const fmt = `${d}/${m}/${y}`
+                                                                                        const fmt = `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${y}`
                                                                                         setEditValues(prev => ({
                                                                                             ...prev,
                                                                                             workingDate: fmt,
@@ -704,7 +744,7 @@ function Holidays() {
                                                                                     const inputDate = e.target.value
                                                                                     if (inputDate) {
                                                                                         const [y, m, d] = inputDate.split('-')
-                                                                                        const fmt = `${d}/${m}/${y}`
+                                                                                        const fmt = `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${y}`
                                                                                         setEditValues(prev => ({
                                                                                             ...prev,
                                                                                             date: fmt,
